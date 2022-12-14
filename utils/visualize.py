@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 
+from helpers import World2Cam, Pos_transform, build_matrix
 
 def seg_mask(rgb,seg):
     width, height = seg.shape
@@ -72,7 +73,21 @@ def print_minmax(rgb,flo,seg_mask):
     
     return rgb
 
-def viz_pts():
+def viz_pts(mask, i, P_r, M_t, K):
+    point_size = 1
+    point_color = (0,0,255)
+    thickness = 4
 
-    
-    return
+    height, width = mask.shape
+    img = np.ones((height,width,3))*255
+    for h in range(height):
+        for w in range(width):
+            if mask[h][w] == 1:
+                img[h][w] = [0,0,0]
+
+    for i in P_r:
+        p_c = Pos_transform(M_t,i).astype(np.int)
+        u,v = World2Cam(K, p_c)
+        cv2.circle(img,(u,v), point_size, point_color, thickness)
+        
+    cv2.imwrite('result/'+str(i).zfill(5)+'.png',img)

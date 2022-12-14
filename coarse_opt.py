@@ -1,6 +1,6 @@
 import numpy as np
 
-from utils.helpers import Pos_transform, World2Cam
+from utils.helpers import Pos_transform, World2Cam, build_matrix
 from utils.SA import SimulatedAnnealingBase
 
 class projection_problem():
@@ -25,39 +25,9 @@ class projection_problem():
 
     def objective_function(self,t):
         # get the objective function
-        T = self.build_matrix(t)
+        T = build_matrix(t)
         return self.n - self.get_number_of_points(T)
 
-    def build_matrix(self, t):
-        # t:[:4], quaternion
-        # t:[4:], transition
-        # return: T[4x4]
-
-        x,y,z,w = t[:4]
-        trans = t[4:]
-        mag = np.sqrt(x*x+y*y+z*z+w*w)
-        x,y,z,w = [x,y,z,w]/mag
-
-        Ts = np.array([[trans[0]], [trans[1]], [trans[2]]])
-        M_r = np.zeros((3,3))
-        M_r[0][0] = 1 - 2*(y**2) - 2*(z**2)
-        M_r[0][1] = 2*x*y - 2*w*z
-        M_r[0][2] = 2*x*z + 2*w*y
-        M_r[1][0] = 2*x*y + 2*w*z
-        M_r[1][1] = 1 - 2*(x**2) - 2*(z**2)
-        M_r[1][2] = 2*y*z - 2*w*x
-        M_r[2][0] = 2*x*z - 2*w*y
-        M_r[2][1] = 2*y*z + 2*w*x
-        M_r[2][2] = 1 - 2*(x**2) -2*(y**2)
-        M_p = np.hstack((M_r,Ts))
-
-        return M_p
-
-def step(T):
-    # Make a small change to T.
-    # Return: T after changed.
-
-    return
 
 def coarse_optimize(M_t_init, P_r, K, mask):
     # Run SA to maximize objective function

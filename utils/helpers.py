@@ -48,8 +48,8 @@ def World2Cam(K,P):
     cx = K[0][2]
     cy = K[1][2]
     d = -x
-    u = cx - z*f_u/d
-    v = cy + f_v*y/d
+    u = int(cx - z*f_u/d)
+    v = int(cy + f_v*y/d)
 
     return np.array([u,v])
 
@@ -87,6 +87,31 @@ def Pos_transform(T, P):
     P1 = np.dot(T,P)
 
     return P1
+
+def build_matrix( t):
+    # t:[:4], quaternion
+    # t:[4:], transition
+    # return: T[4x4]
+
+    x,y,z,w = t[:4]
+    trans = t[4:]
+    mag = np.sqrt(x*x+y*y+z*z+w*w)
+    x,y,z,w = [x,y,z,w]/mag
+
+    Ts = np.array([[trans[0]], [trans[1]], [trans[2]]])
+    M_r = np.zeros((3,3))
+    M_r[0][0] = 1 - 2*(y**2) - 2*(z**2)
+    M_r[0][1] = 2*x*y - 2*w*z
+    M_r[0][2] = 2*x*z + 2*w*y
+    M_r[1][0] = 2*x*y + 2*w*z
+    M_r[1][1] = 1 - 2*(x**2) - 2*(z**2)
+    M_r[1][2] = 2*y*z - 2*w*x
+    M_r[2][0] = 2*x*z - 2*w*y
+    M_r[2][1] = 2*y*z + 2*w*x
+    M_r[2][2] = 1 - 2*(x**2) -2*(y**2)
+    M_p = np.hstack((M_r,Ts))
+
+    return M_p
 
 def remask(mask, idx):
     # Mask again. if mask == idx, mask = 1. 0 otherwise

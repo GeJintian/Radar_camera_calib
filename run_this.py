@@ -63,8 +63,8 @@ def demo(image_path, point_path, camera_calib_file, segment_cfg, segment_ckpts, 
         images = glob.glob(os.path.join(image_path, '*.png')) + \
                  glob.glob(os.path.join(image_path, '*.jpg'))
         images = sorted(images)
-        points = glob.glob(os.path.join(image_path, '*.png')) + \
-                 glob.glob(os.path.join(image_path, '*.jpg'))
+        points = glob.glob(os.path.join(point_path, '*.png')) + \
+                 glob.glob(os.path.join(point_path, '*.jpg'))
         points = sorted(points)
 
         #for imfile1, imfile2 in zip(images[:-1], images[1:]):
@@ -90,7 +90,7 @@ def demo(image_path, point_path, camera_calib_file, segment_cfg, segment_ckpts, 
             M_t = coarse_optimize(M_t_init, P_r, K, new_mask)
             M_t_init = M_t
 
-            viz_pts(new_mask, i, P_r, M_t)
+            viz_pts(new_mask, i, P_r, M_t,K)
 
 
 
