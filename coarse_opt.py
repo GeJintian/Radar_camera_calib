@@ -26,7 +26,8 @@ class projection_problem():
     def objective_function(self,t):
         # get the objective function
         T = build_matrix(t)
-        return self.n - self.get_number_of_points(T)
+        score = self.n - self.get_number_of_points(T)
+        return score
 
 
 def coarse_optimize(M_t_init, P_r, K, mask):
