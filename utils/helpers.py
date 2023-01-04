@@ -22,9 +22,11 @@ class Queue:
         return len(self.list) == 0
 
 def Cam2World(K,P):
-    # K: [3x3] camera intrinsics
-    # P: [3x1] camera point [[u],[v],[d]]
-    # return: np.array([4x1]) 3D camera point [[x],[y],[z],[1]]
+    """
+    K: [3x3] camera intrinsics
+    P: [3x1] camera point [[u],[v],[d]]
+    return: np.array([4x1]) 3D camera point [[x],[y],[z],[1]]
+    """
 
     u,v,d = P
     f_u = K[0][0]
@@ -38,9 +40,11 @@ def Cam2World(K,P):
     return np.array([x,y,z,[1]])
 
 def World2Cam(K,P):
-    # K: [3x3] camera intrinsics
-    # P: [4x1] camera point [[x],[y],[z],[1]]
-    # return: np.array([2x1]) 2D camera point [[u],[v]]
+    """
+    K: [3x3] camera intrinsics
+    P: [4x1] camera point [[x],[y],[z],[1]]
+    return: np.array([2x1]) 2D camera point [[u],[v]]
+    """
 
     x,y,z = P[:-1]
     f_u = K[0][0]
@@ -48,15 +52,17 @@ def World2Cam(K,P):
     cx = K[0][2]
     cy = K[1][2]
     d = -x
-    u = int(cx - z*f_u/d)
-    v = int(cy + f_v*y/d)
+    u = round(cx - z*f_u/d)
+    v = round(cy + f_v*y/d)
 
     return np.array([u,v])
 
 def Doppler_velocity(v,p):
-    # v:[4x1] velocity， [[vx],[vy],[vz],[0]]
-    # p:[4x1] 3D position
-    # return: v_D: doppler velocity
+    """
+    v:[4x1] velocity, [[vx],[vy],[vz],[0]]
+    p:[4x1] 3D position
+    return: v_D: doppler velocity
+    """
 
     x,y,z = p[:-1]
     vx,vy,vz = v[:-1]
@@ -65,10 +71,12 @@ def Doppler_velocity(v,p):
 
     return vd
 
-def Pos2Vel(p1,p2,t):
-    # p1, p2: [3x1] two positions in world coordinate
-    # t: time interval
-    # return: np.array([3x1]) velocity in this time interval
+def Pos2Vel(p1,p2,t):#TODO: check if this is used
+    """
+    p1, p2: [3x1] two positions in world coordinate
+    t: time interval
+    return: np.array([3x1]) velocity in this time interval    
+    """
 
     dx = p1[0]-p2[0]
     dy = p1[1]-p2[1]
@@ -81,17 +89,22 @@ def read_calibration(path):
     return
 
 def Pos_transform(T, P):
-    # T: [4x4] extrinsics
-    # P: [4X1] position to be transformed
-    # return: P1 [4x1] transformed result
+    """
+    T: [4x4] extrinsics
+    P: [4X1] position to be transformed
+    return: P1 [4x1] transformed result    
+    """
+
     P1 = np.dot(T,P)
 
     return P1
 
-def build_matrix( t):
-    # t:[:4], quaternion
-    # t:[4:], transition
-    # return: T[4x4]
+def build_matrix(t):
+    """
+    t:[:4], quaternion
+    t:[4:], transition
+    return: T[4x4]    
+    """
 
     x,y,z,w = t[:4]
     trans = t[4:]
@@ -147,8 +160,10 @@ class Masking_problem():
         return p_set
 
 def BFS(mask):
-    # This function will search in the mask to find the largest area with mask == 1
-    # return: new_mask in the same shape of mask
+    """
+    This function will search in the mask to find the largest area with mask == 1
+    return: new_mask in the same shape of mask    
+    """
 
     new_mask = np.zeros_like(mask)
     x_idx, y_idx = np.where(mask==1)

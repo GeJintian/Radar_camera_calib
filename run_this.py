@@ -23,8 +23,13 @@ def get_image(imfile):
     # TODO: get image from camera
     return
 
-def load_image(imfile):
-    img = np.array(Image.open(imfile)).astype(np.uint8)
+def load_depth(dfile):
+    img = cv2.imread(dfile)
+
+    return img
+
+def load_RGB(imfile):
+    img = np.array(Image.open(imfile)).astype(np.uint8) # read left image on RGB format
     img = torch.from_numpy(img).permute(2, 0, 1).float()
     return img[None].to(DEVICE)
 
@@ -45,7 +50,7 @@ def mask(rgb,edge):
                 rgb[i][j] = [255,255,255]
                 
 
-def demo(image_path, point_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init):
+def demo(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init):
     # model = torch.nn.DataParallel(RAFT(args))
     # model.load_state_dict(torch.load(args.model))
 
@@ -66,7 +71,9 @@ def demo(image_path, point_path, camera_calib_file, segment_cfg, segment_ckpts, 
         points = glob.glob(os.path.join(point_path, '*.png')) + \
                  glob.glob(os.path.join(point_path, '*.jpg'))
         points = sorted(points)
-
+        depths = glob.glob(os.path.join(depth_path, '*.png')) + \
+                 glob.glob(os.path.join(depth_path, '*.jpg'))
+        depths = sorted(depths)
         #for imfile1, imfile2 in zip(images[:-1], images[1:]):
         for i in len(images):
             #image1 = load_image(imfile1)
@@ -80,6 +87,7 @@ def demo(image_path, point_path, camera_calib_file, segment_cfg, segment_ckpts, 
             # coarse optimize
             imfile = images[i]
             ptfile = points[i]
+            dpfile = depths[i]
             seg_result = inference_segmentor(segment_model, imfile)[0]
             remasking = remask(seg_result,12)
             new_mask = BFS(remasking)
@@ -105,11 +113,13 @@ if __name__ == '__main__':
     # parser.add_argument('--alternate_corr', action='store_true', help='use efficent correlation implementation')
     # args = parser.parse_args()
 
-    point_path = ''
+    point_path = 'result/radar'
     camera_calib_file = ''
-    image_path = '../people/images'
+    depth_path = 'result/depth'
+
+    image_path = 'result/img'
     segment_cfg = '/home/gejintian/workspace/mmlab/mmsegmentation/configs/segformer/segformer_mit-b2_512x512_160k_ade20k.py'
     segment_ckpts = 'models/b2.pth'
     M_t_init = []
 
-    demo(image_path, point_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init)
+    demo(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init)

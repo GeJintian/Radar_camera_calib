@@ -4,7 +4,7 @@ from utils.helpers import Pos_transform, World2Cam, build_matrix
 from utils.SA import SimulatedAnnealingBase
 
 class projection_problem():
-    # This is the class of projection problem. We want to make sure all projected points are within the mask
+    """This is the class of projection problem. We want to make sure all projected points are within the mask"""
     def __init__(self, K, mask, P_r) -> None:
         self.mask = mask
         self.K = K
@@ -12,9 +12,12 @@ class projection_problem():
         self.n = len(P_r)
 
     def get_number_of_points(self, T):
-        # Given tranform matrix T and radar world points P_r, return the number of P_c= TxP_r which falls into the masking area.
-        # P_r: Nx4x1: [[[x],[y],[z],[1]],[[x],[y],[z],[1]],...]
-        # T: 4x4
+        """
+        Given tranform matrix T and radar world points P_r, return the number of P_c= TxP_r which falls into the masking area.
+        P_r: Nx4x1: [[[x],[y],[z],[1]],[[x],[y],[z],[1]],...]
+        T: 4x4
+        """
+
         count = 0
         for i in self.P_r:
             p_c = Pos_transform(T,i).astype(np.int)
@@ -31,8 +34,10 @@ class projection_problem():
 
 
 def coarse_optimize(M_t_init, P_r, K, mask):
-    # Run SA to maximize objective function
-    # M_t_init: [7x1], quaternion + transition
+    """
+    Run SA to maximize objective function
+    M_t_init: [7x1], quaternion + transition
+    """
 
     # Pre-defined parameters
     T_max = 50 # max temperature
