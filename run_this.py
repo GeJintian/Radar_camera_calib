@@ -4,6 +4,7 @@ from PIL import Image
 import glob
 import numpy as np
 import argparse
+import json
 
 import torch
 from mmseg.apis import inference_segmentor, init_segmentor
@@ -18,10 +19,6 @@ from coarse_opt import coarse_optimize
 
 DEVICE = 'cuda'
 
-def get_image(imfile):
-    # get image from camera
-    # TODO: get image from camera
-    return
 
 def load_depth(dfile):
     img = cv2.imread(dfile)
@@ -34,12 +31,19 @@ def load_RGB(imfile):
     return img[None].to(DEVICE)
 
 def load_points(ptfile):
-    #TODO: load point file
-    return
+    all_points = np.load(ptfile)
+    moving_points = []
+    for pt in all_points:
+        if pt[4] < 0.001: # larger than 0.1 cm/s
+            c = [np.array([i]) for i in pt[:3]]
+            moving_points.append(c)
+
+    return moving_points
 
 def load_camera_calib(cfg):
-    # TODO: load camera calibration file
-    return
+    config = np.load(cfg)
+    k = config.reshape((3,3))
+    return k
 
 def mask(rgb,edge):
     bool_edge = edge/255
@@ -50,7 +54,7 @@ def mask(rgb,edge):
                 rgb[i][j] = [255,255,255]
                 
 
-def demo(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init):
+def demo(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment_file):
     # model = torch.nn.DataParallel(RAFT(args))
     # model.load_state_dict(torch.load(args.model))
 
@@ -62,18 +66,16 @@ def demo(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segm
     segment_model.eval()
     
     K = load_camera_calib(camera_calib_file)
-
+    f = open(alignment_file,'r')
+    alignment = f.read()
+    alignment = json.loads(alignment)
+    f.close()
 
     with torch.no_grad():
         images = glob.glob(os.path.join(image_path, '*.png')) + \
                  glob.glob(os.path.join(image_path, '*.jpg'))
         images = sorted(images)
-        points = glob.glob(os.path.join(point_path, '*.png')) + \
-                 glob.glob(os.path.join(point_path, '*.jpg'))
-        points = sorted(points)
-        depths = glob.glob(os.path.join(depth_path, '*.png')) + \
-                 glob.glob(os.path.join(depth_path, '*.jpg'))
-        depths = sorted(depths)
+
         #for imfile1, imfile2 in zip(images[:-1], images[1:]):
         for i in len(images):
             #image1 = load_image(imfile1)
@@ -86,10 +88,10 @@ def demo(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segm
 
             # coarse optimize
             imfile = images[i]
-            ptfile = points[i]
-            dpfile = depths[i]
+            ptfile = os.path.join(point_path,alignment[imfile.split('/')[-1]])
+            dpfile = os.path.join(depth_path,alignment[imfile.split('/')[-1]])
             seg_result = inference_segmentor(segment_model, imfile)[0]
-            remasking = remask(seg_result,12)
+            remasking = remask(seg_result,12) # 12 is the idx of person
             new_mask = BFS(remasking)
             
             #viz_mask(new_mask,i)
@@ -99,9 +101,6 @@ def demo(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segm
             M_t_init = M_t
 
             viz_pts(new_mask, i, P_r, M_t,K)
-
-
-
 
 
 if __name__ == '__main__':
@@ -114,12 +113,13 @@ if __name__ == '__main__':
     # args = parser.parse_args()
 
     point_path = 'result/radar'
-    camera_calib_file = ''
+    camera_calib_file = 'result/calibration.npy'
     depth_path = 'result/depth'
 
     image_path = 'result/img'
     segment_cfg = '/home/gejintian/workspace/mmlab/mmsegmentation/configs/segformer/segformer_mit-b2_512x512_160k_ade20k.py'
     segment_ckpts = 'models/b2.pth'
     M_t_init = []
+    alignment = 'result/alignment.json'
 
-    demo(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init)
+    demo(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment)

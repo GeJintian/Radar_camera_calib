@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 
-from helpers import World2Cam, Pos_transform, build_matrix
+from .helpers import World2Cam, Pos_transform, build_matrix
 
 def seg_mask(rgb,seg):
     width, height = seg.shape

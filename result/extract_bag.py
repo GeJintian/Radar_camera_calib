@@ -20,17 +20,17 @@ radar_data = bag.read_messages(radar)
 cam_info = bag.read_messages(cam_info)
 
 # depth_data
-count = 0
-for topic,msg,t in depth_data:
+for topic,msg,t in radar_data:
 
     #pct = pc2.read_points(msg)
-    d_image = bridge.imgmsg_to_cv2(msg,"mono16")
+    #d_image = bridge.imgmsg_to_cv2(msg,"passthrough")
     #d_image = d_image.copy()*1000.0
     #d_image = d_image.astype(np.uint16)
-    #print(msg.header.stamp.secs)
+    #k = np.array(list(msg.K))
+    print(msg)
     #pct_np=np.array(list(pct))
-    #break
-    cv2.imwrite("depth/"+str(msg.header.stamp)+'.png',d_image)
-    #np.save("radar/frame"+str(count).zfill(4)+'.npy',pct_np)
-    count = count +1
+    #np.save("calibration.npy",k)
+    break
+    #cv2.imwrite("depth/"+str(msg.header.stamp.secs)+"_"+str(msg.header.stamp.nsecs).zfill(9)+'.png',d_image)
+    #np.save("radar/"+str(msg.header.stamp.secs)+"_"+str(msg.header.stamp.nsecs).zfill(9)+'.npy',pct_np)
 bag.close()

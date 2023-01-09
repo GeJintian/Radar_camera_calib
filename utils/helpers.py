@@ -57,7 +57,7 @@ def World2Cam(K,P):
 
     return np.array([u,v])
 
-def Doppler_velocity(v,p):
+def Radar_velocity(v,p):
     """
     v:[4x1] velocity, [[vx],[vy],[vz],[0]]
     p:[4x1] 3D position
@@ -139,6 +139,9 @@ def remask(mask, idx):
     return mask
 
 class Masking_problem():
+    """
+    Problem defined for masking
+    """
     def __init__(self, mask):
         self.mask = mask
         self.height, self.width = self.mask.shape

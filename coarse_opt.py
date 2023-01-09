@@ -17,7 +17,7 @@ class projection_problem():
         P_r: Nx4x1: [[[x],[y],[z],[1]],[[x],[y],[z],[1]],...]
         T: 4x4
         """
-
+ 
         count = 0
         for i in self.P_r:
             p_c = Pos_transform(T,i).astype(np.int)
