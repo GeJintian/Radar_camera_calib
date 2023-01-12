@@ -34,8 +34,10 @@ def load_points(ptfile):
     all_points = np.load(ptfile)
     moving_points = []
     for pt in all_points:
-        if pt[4] < 0.001: # larger than 0.1 cm/s
+        if abs(pt[4]) > 0.001: # larger than 0.1 cm/s
             c = [np.array([i]) for i in pt[:3]]
+            c.append(np.array([1]))
+            c=np.array(c)
             moving_points.append(c)
 
     return moving_points
@@ -75,9 +77,10 @@ def demo(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segm
         images = glob.glob(os.path.join(image_path, '*.png')) + \
                  glob.glob(os.path.join(image_path, '*.jpg'))
         images = sorted(images)
-
+        #print(images)
         #for imfile1, imfile2 in zip(images[:-1], images[1:]):
-        for i in len(images):
+        count = 0
+        for i in range(len(images)):
             #image1 = load_image(imfile1)
             #image2 = load_image(imfile2)
             #print(image1.shape)
@@ -90,17 +93,29 @@ def demo(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segm
             imfile = images[i]
             ptfile = os.path.join(point_path,alignment[imfile.split('/')[-1]])
             dpfile = os.path.join(depth_path,alignment[imfile.split('/')[-1]])
+            P_r = load_points(ptfile)
+            #print(P_r)
+            if len(P_r)==0:
+                print("In this frame, there is no moving items")
+                count = count + 1
+                continue
             seg_result = inference_segmentor(segment_model, imfile)[0]
             remasking = remask(seg_result,12) # 12 is the idx of person
             new_mask = BFS(remasking)
             
             #viz_mask(new_mask,i)
             #viz_optical(image1, flow_up, seg_result, i)
-            P_r = load_points(ptfile)
-            M_t = coarse_optimize(M_t_init, P_r, K, new_mask)
-            M_t_init = M_t
 
-            viz_pts(new_mask, i, P_r, M_t,K)
+            M_t = coarse_optimize(M_t_init, P_r, K, new_mask,imfile.split('/')[-1])
+            M_t_init = M_t
+            x,y,z,w = M_t_init[:4]
+            mag = np.sqrt(x*x+y*y+z*z+w*w) + 0.00001 #avoid 0
+            M_t_init[:4] = [x,y,z,w]/mag
+
+            viz_pts(new_mask, imfile.split('/')[-1], P_r, M_t_init,K)
+
+        print(M_t_init)
+        print("There are "+str(count)+" frames with no moving")
 
 
 if __name__ == '__main__':
@@ -119,7 +134,7 @@ if __name__ == '__main__':
     image_path = 'result/img'
     segment_cfg = '/home/gejintian/workspace/mmlab/mmsegmentation/configs/segformer/segformer_mit-b2_512x512_160k_ade20k.py'
     segment_ckpts = 'models/b2.pth'
-    M_t_init = []
+    M_t_init = [0,0,0,0,-3/100,-5.9/100,8.75/100]
     alignment = 'result/alignment.json'
 
     demo(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment)

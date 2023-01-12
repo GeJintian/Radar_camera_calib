@@ -29,13 +29,13 @@ def Cam2World(K,P):
     """
 
     u,v,d = P
-    f_u = K[0][0]
-    f_v = K[1][1]
-    cx = K[0][2]
-    cy = K[1][2]
-    z = -d * (u-cx)/f_u
-    y = d * (v-cy)/f_v
-    x = -d
+    f_v = K[0][0]
+    f_u = K[1][1]
+    cv = K[0][2]
+    cu = K[1][2]
+    z = d * (cu-u)/f_u
+    y = d * (cv-v)/f_v
+    x = d
 
     return np.array([x,y,z,[1]])
 
@@ -45,19 +45,18 @@ def World2Cam(K,P):
     P: [4x1] camera point [[x],[y],[z],[1]]
     return: np.array([2x1]) 2D camera point [[u],[v]]
     """
-
     x,y,z = P[:-1]
-    f_u = K[0][0]
-    f_v = K[1][1]
-    cx = K[0][2]
-    cy = K[1][2]
-    d = -x
-    u = round(cx - z*f_u/d)
-    v = round(cy + f_v*y/d)
+    f_v = K[0][0]
+    f_u = K[1][1]
+    cv = K[0][2]
+    cu = K[1][2]
+    d = x
+    u = np.int(np.round(cu - z*f_u/d))
+    v = np.int(np.round(cv - f_v*y/d))
 
-    return np.array([u,v])
+    return np.array([[u],[v]])
 
-def Radar_velocity(v,p):
+def Doppler_velocity(v,p):
     """
     v:[4x1] velocity, [[vx],[vy],[vz],[0]]
     p:[4x1] 3D position
@@ -108,9 +107,8 @@ def build_matrix(t):
 
     x,y,z,w = t[:4]
     trans = t[4:]
-    mag = np.sqrt(x*x+y*y+z*z+w*w)
+    mag = np.sqrt(x*x+y*y+z*z+w*w) + 0.00001
     x,y,z,w = [x,y,z,w]/mag
-
     Ts = np.array([[trans[0]], [trans[1]], [trans[2]]])
     M_r = np.zeros((3,3))
     M_r[0][0] = 1 - 2*(y**2) - 2*(z**2)
@@ -123,6 +121,7 @@ def build_matrix(t):
     M_r[2][1] = 2*y*z + 2*w*x
     M_r[2][2] = 1 - 2*(x**2) -2*(y**2)
     M_p = np.hstack((M_r,Ts))
+    M_p = np.vstack((M_p,np.array([0,0,0,1])))
 
     return M_p
 

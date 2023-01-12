@@ -39,6 +39,8 @@ class SimulatedAnnealingBase():
 
         self.best_x = np.array(x0)  # initial solution
         self.best_y = self.problem.objective_function(self.best_x)
+        print("There are "+str(self.problem.get_all_pts_number())+" points in this frame.")
+        #print("In the beginning, best score is ",self.best_y)
         self.T = self.T_max
         self.iter_cycle = 0
         self.generation_best_X, self.generation_best_Y = [self.best_x], [self.best_y]
@@ -47,7 +49,9 @@ class SimulatedAnnealingBase():
 
     def get_new_x(self, x):
         u = np.random.uniform(-1, 1, size=self.n_dim)
-        x_new = x + 20 * np.sign(u) * self.T * ((1 + 1.0 / self.T) ** np.abs(u) - 1.0)
+        x_new = np.zeros(x.shape)
+        x_new[:4] = x[:4] + 2 * np.sign(u[:4]) * self.T * ((1 + 1.0 / self.T) ** np.abs(u[:4]) - 1.0)
+        x_new[4:] = x[4:] + 0.2 * np.sign(u[4:]) * self.T * ((1 + 1.0 / self.T) ** np.abs(u[4:]) - 1.0)
         return x_new
 
     def cool_down(self):
@@ -62,7 +66,7 @@ class SimulatedAnnealingBase():
         while True:
             for i in range(self.L):
                 x_new = self.get_new_x(x_current)
-                y_new = self.func(x_new)
+                y_new = self.problem.objective_function(x_new)
 
                 # Metropolis
                 df = y_new - y_current

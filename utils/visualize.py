@@ -73,11 +73,13 @@ def print_minmax(rgb,flo,seg_mask):
     
     return rgb
 
-def viz_pts(mask, i, P_r, M_t, K):
+def viz_pts(mask, imfile, P_r, t, K):
+    
     point_size = 1
     point_color = (0,0,255)
     thickness = 4
 
+    M_t = build_matrix(t)
     height, width = mask.shape
     img = np.ones((height,width,3))*255
     for h in range(height):
@@ -86,8 +88,13 @@ def viz_pts(mask, i, P_r, M_t, K):
                 img[h][w] = [0,0,0]
 
     for i in P_r:
-        p_c = Pos_transform(M_t,i).astype(np.int)
+        p_c = Pos_transform(M_t,i)
         u,v = World2Cam(K, p_c)
-        cv2.circle(img,(u,v), point_size, point_color, thickness)
+        if u[0] < 0 or u[0] > height-1 or v[0] < 0 or v[0] > width-1:
+            print("Out of index")
+        if mask[u[0]][v[0]] != 1:
+            print("Not 1")
+        cv2.circle(img,(v[0],u[0]), point_size, point_color, thickness)
+        #print(u[0],v[0])
         
-    cv2.imwrite('result/'+str(i).zfill(5)+'.png',img)
+    cv2.imwrite('result/coarse/'+imfile+'.png',img)
