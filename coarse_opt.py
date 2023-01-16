@@ -19,8 +19,8 @@ class projection_problem():
         for i in range(self.h):
             for j in range(self.w):
                 if self.mask[i][j] == 1:
-                    u_sum += i
-                    v_sum += j
+                    v_sum += i
+                    u_sum += j
                     count += 1
         self.centroid = (u_sum/count, v_sum/count)
 
@@ -37,13 +37,13 @@ class projection_problem():
             #print(i)
             p_c = Pos_transform(T,i)
             u,v = World2Cam(self.K, p_c)
-            if u[0] < 0 or u[0] > self.h-1 or v[0] < 0 or v[0] > self.w-1:
-                sum_val += np.sqrt(((u[0]-self.centroid[0])/self.h)**2 + ((v[0]-self.centroid[1])/self.w)**2)
+            if v[0] < 0 or v[0] > self.h-1 or u[0] < 0 or u[0] > self.w-1:
+                sum_val += np.sqrt(((u[0]-self.centroid[0])/self.w)**2 + ((v[0]-self.centroid[1])/self.h)**2)
                 continue
-            if self.mask[u[0]][v[0]] == 1:
+            if self.mask[v[0]][u[0]] == 1:
                 count = count+1
             else:
-                sum_val += np.sqrt(((u[0]-self.centroid[0])/self.h)**2 + ((v[0]-self.centroid[1])/self.w)**2)
+                sum_val += np.sqrt(((u[0]-self.centroid[0])/self.w)**2 + ((v[0]-self.centroid[1])/self.h)**2)
 
         return -count*100+sum_val
 

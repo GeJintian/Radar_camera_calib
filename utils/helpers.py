@@ -29,12 +29,12 @@ def Cam2World(K,P):
     """
 
     u,v,d = P
-    f_v = K[0][0]
-    f_u = K[1][1]
-    cv = K[0][2]
-    cu = K[1][2]
-    z = d * (cu-u)/f_u
-    y = d * (cv-v)/f_v
+    f_u = K[0][0]
+    f_v = K[1][1]
+    cu = K[0][2]
+    cv = K[1][2]
+    z = d * (cv-v)/f_v
+    y = d * (cu-u)/f_u
     x = d
 
     return np.array([x,y,z,[1]])
@@ -46,13 +46,13 @@ def World2Cam(K,P):
     return: np.array([2x1]) 2D camera point [[u],[v]]
     """
     x,y,z = P[:-1]
-    f_v = K[0][0]
-    f_u = K[1][1]
-    cv = K[0][2]
-    cu = K[1][2]
+    f_u = K[0][0]
+    f_v = K[1][1]
+    cu = K[0][2]
+    cv = K[1][2]
     d = x
-    u = np.int(np.round(cu - z*f_u/d))
-    v = np.int(np.round(cv - f_v*y/d))
+    u = np.int(np.round(cu - f_u*y/x))
+    v = np.int(np.round(cv - f_v*z/x))
 
     return np.array([[u],[v]])
 
@@ -77,15 +77,11 @@ def Pos2Vel(p1,p2,t):#TODO: check if this is used
     return: np.array([3x1]) velocity in this time interval    
     """
 
-    dx = p1[0]-p2[0]
-    dy = p1[1]-p2[1]
-    dz = p1[2]-p2[2]
+    dx = p2[0]-p1[0]
+    dy = p2[1]-p1[1]
+    dz = p2[2]-p1[2]
 
     return np.array([dx/t,dy/t,dz/t,[0]])
-
-def read_calibration(path):
-
-    return
 
 def Pos_transform(T, P):
     """
@@ -145,20 +141,20 @@ class Masking_problem():
         self.mask = mask
         self.height, self.width = self.mask.shape
     def get_surroundings(self, p):
-        x,y = p
+        u,v = p
         p_set = []
-        if x + 1 < self.height:
-            if self.mask[x+1][y] == 1:
-                p_set.append((x+1,y))
-        if x - 1 > 0:
-            if self.mask[x-1][y] == 1:
-                p_set.append((x-1,y))
-        if y + 1 < self.width:
-            if self.mask[x][y+1] == 1:
-                p_set.append((x,y+1))
-        if y - 1 > 0:
-            if self.mask[x][y-1] == 1:
-                p_set.append((x,y-1))
+        if v + 1 < self.height:
+            if self.mask[v+1][u] == 1:
+                p_set.append((u,v+1))
+        if v - 1 > 0:
+            if self.mask[v-1][u] == 1:
+                p_set.append((u,v-1))
+        if u + 1 < self.width:
+            if self.mask[v][u+1] == 1:
+                p_set.append((u+1,v))
+        if u - 1 > 0:
+            if self.mask[v][u-1] == 1:
+                p_set.append((u-1,v))
         return p_set
 
 def BFS(mask):
@@ -168,11 +164,11 @@ def BFS(mask):
     """
 
     new_mask = np.zeros_like(mask)
-    x_idx, y_idx = np.where(mask==1)
+    v_idx, u_idx = np.where(mask==1)
     #print(x_idx)
     mask_set = set([])
-    for i in range(len(x_idx)):
-        mask_set.add((x_idx[i],y_idx[i]))
+    for i in range(len(v_idx)):
+        mask_set.add((u_idx[i],v_idx[i]))
     groups = []
     problem = Masking_problem(mask)
 
@@ -201,6 +197,6 @@ def BFS(mask):
             count = len(visit)
             max_group = visit
     for i in max_group:
-        new_mask[i[0]][i[1]] = 1
+        new_mask[i[1]][i[0]] = 1
 
     return new_mask

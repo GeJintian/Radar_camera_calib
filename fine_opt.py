@@ -5,38 +5,45 @@ from utils.helpers import Cam2World, World2Cam, Doppler_velocity, Pos2Vel, Pos_t
 
 
 class optical_field():
-    def __init__(self, optical_map, depth_map0, depth_map1, dt, focal,cu,cv) -> None:
+    def __init__(self, optical_map, depth_map0, depth_map1, dt, K) -> None:
         # dt is the time interval between each image
         self.optical_map = optical_map
         self.depth_map0 = depth_map0
         self.depth_map1 = depth_map1
         self.dt = dt
-        self.f = focal
-        self.cu = cu
-        self.cv = cv
+        self.k = K
     
     def get_next_opt(self, u, v):
-        return (u+np.round(self.optical_map[u][v][0]), v+np.round(self.optical_map[u][v][1]))
+        return (u+np.round(self.optical_map[v][u][0]), v+np.round(self.optical_map[v][u][1])) #TODO: Check, is the first output for u-axis?
 
     def get_dep0(self, u, v):
-        return self.depth_map0[np.round(u)][np.round(v)]
+        return self.depth_map0[np.round(v)][np.round(u)]
 
     def get_dep1(self, u, v):
-        return self.depth_map1[np.round(u)][np.round(v)]
+        return self.depth_map1[np.round(v)][np.round(u)]
 
-    def get_velocity(self,u,v):
+    def get_velocity_uv(self,u,v):
         # return: [4x1]
         u1,v1 = self.get_next_opt(u,v)
         d0 = self.get_dep0(u,v)
         d1 = self.get_dep1(u1,v1)
         
-        vx = (d1-d0)/self.dt
-        vy = (d1*(self.cv-v1)-d0*(self.cv-v))/(self.dt*self.f)
-        vz = (d1*(self.cu-u1)-d0*(self.cu-u))/(self.dt*self.f)
-
-        return np.array([[vx],[vy],[vz],[0]])
+        p0 = Cam2World(self.k, np.array([[u],[v],[d0],[1]]))
+        p1 = Cam2World(self.k, np.array([[u1],[v1],[d1],[1]]))
+        vel = Pos2Vel(p0,p1,self.dt)
+        return vel
     
+    def get_velocity(self, P):
+        u,v = World2Cam(self.k, P)
+        return self.get_velocity_uv(u[0],v[0])
+
     #We might need bilinear interpolation and central difference for optical field
+    def central_difference(self, u, v):
+        """
+        Result should be [3*2]
+        """
+
+        return
 
 def Ji(cVc, T, Vr):
     """return: compute Ji, which is the cost function for one single point"""
@@ -78,7 +85,7 @@ def dLieAlg(T,P):
 def dalpha(T, Vr, cVc):#TODO: add more arguments for dopt
     """Derivative of alpha"""
     cVr = dot(T,Vr)
-    result = dot(transpose(cVr),dcVc()) + dot(transpose(cVc),dLieAlg(T,Vr))#TODO: finish dcVc
+    result = dot(transpose(cVr),dcVc()) + dot(transpose(cVc),dLieAlg(T,Vr)) #TODO:finish dcVc
 
     return result
 
@@ -94,15 +101,31 @@ def dgamma(T, Vr, cVc):
     result = dalpha(T,Vr, cVc) - dbeta(T,Vr) #TODO:add more arguments
     return result
 
-def dopt():
-    """Derivative of optical flow velocity. Using central difference"""
+def dopt(field):
+    """
+    Derivative of optical flow velocity. Using central difference.
+    Instead of directly compute the DFM of dv/dp, it is better to transfer 3D position into a 2D camera coordinate, and then apply 2D DFM
+    """
+    #TODO: compute a 2-dimension central difference + chain rule
+    result = dot(field.central_difference(),dP_cam())
+    return result
 
+def dP_cam():
+    #TODO: compute the derivative of P_cam against P_world
     return
 
-def dcVc():
+def dcVc(T, Pr):
     """Derivative of cVc. dcVc = dopt*dLieAlg(T,Pr) """
-    return
-def fine_optimize():
-    """fine opt is implemented in a gradient descent manner"""
+    Dpr = dLieAlg(T, Pr)
+    result = dopt()*Dpr
+    return result
+
+def fine_optimize(M_init, P_r, K, optical_map, depth_map0, depth_map1, dt):
+    """fine opt is implemented in a gradient descent/steepest ascent manner"""
+    field = optical_field(optical_map, depth_map0, depth_map1, dt, K)
+    for i in P_r:
+        p_c = Pos_transform(M_init,i)
+        u,v = World2Cam(K, p_c)
+
 
     return
