@@ -1,7 +1,7 @@
 import numpy as np
-from numpy import dot, transpose
+import scipy
 import cv2
-from utils.helpers import Cam2World, World2Cam, Doppler_velocity, Pos2Vel, Pos_transform
+from utils.helpers import Cam2World, World2Cam, Doppler_velocity, Pos2Vel, Pos_transform, build_matrix
 
 
 class optical_field():
@@ -42,14 +42,63 @@ class optical_field():
         """
         Result should be [3*2]
         """
-
+        #TODO:finish implementation of 2-dim central difference
         return
+
+def anti_sym_mat(phi):
+    """
+    compute anti-symmetric matrix of the input vector. Vector should be [3x1]
+    """
+    p1,p2,p3 = phi
+    anti_sym_mat = np.array([[0,-p3[0],p2[0]],[p3[0],0,-p1[0]],[-p2[0],p1[0],0]])
+    return anti_sym_mat
+
+def Group2Alg(T):
+    """
+    Compute Lie Group SE(3) to Lie Algebra se(3)
+
+    T: [4x4] transformation matrix
+    return: [6x1] Lie algebra of T
+    """
+    R = T[:3,:3]
+    t = T[:3,3]
+    t = np.array([t]).T
+    theta = np.arccos((np.trace(R)-1)/2)
+    eigval,eigvec = scipy.linalg.eig(R,right = True)
+    for i in range(len(eigval)):
+        if abs(eigval[i] - 1) < 1e-9:
+            break
+    a = eigvec[i] #should be 1-dim
+    a = np.array([a]).T # transform to nx1
+    phi = theta*a
+
+    J = np.sin(theta)/theta*np.eye(3) + (1-np.sin(theta)/theta)*a@a.T + (1-np.cos(theta))/theta*anti_sym_mat(a)
+    rho = np.linalg.solve(J,t.T[0])
+    rho = np.array([rho]).T
+    return np.vstack((rho,phi))
+
+def Alg2Group(xi):
+    """
+    Compute Lie Algebra se(3) to Lie Group SE(3)
+
+    xi: [6x1] Lie alg in se(3)
+    return: [4x4] Lie group of xi in SE(3)
+    """
+    phi = xi[3:]
+    rho = xi[:3]
+    theta = np.linalg.norm(phi)
+    a = phi/theta
+    J = np.sin(theta)/theta*np.eye(3) + (1-np.sin(theta)/theta)*a@a.T + (1-np.cos(theta))/theta*anti_sym_mat(a)
+    R = np.cos(theta)*np.eye(3) + (1-np.cos(theta))*a@a.T + np.sin(theta)*anti_sym_mat(a)
+    result = np.hstack((R,J@rho))
+    result = np.vstack((result,np.array([0,0,0,1])))
+    return result
 
 def Ji(cVc, T, Vr):
     """return: compute Ji, which is the cost function for one single point"""
-    cVr = dot(T,Vr)
-    alpha = dot(transpose(cVc),cVr) # should be scalar
-    beta = dot(transpose(cVr),cVr) # should be scalar
+    cVr = T@Vr
+    alpha = cVc.T@cVr # should be scalar
+    beta = cVr.T@cVr # should be scalar
     return (alpha-beta)*cVr
 
 def J(cVcs, T, Vrs):
@@ -57,16 +106,16 @@ def J(cVcs, T, Vrs):
     loss = 0
     for i in range(cVcs):
         ji = Ji(cVcs[i], T, Vrs[i])
-        loss += dot(transpose(ji),ji)
+        loss += ji.T@ji
     return loss
 
 def dJi(cVc, T, Vr):
     """differentiate of Ji"""
-    cVr = dot(T,Vr)
-    alpha = dot(transpose(cVc),cVr) # should be scalar
-    beta = dot(transpose(cVr),cVr) # should be scalar
+    cVr = T@Vr
+    alpha = cVc.T@cVr # should be scalar
+    beta = cVr.T@cVr # should be scalar
     gamma = alpha-beta
-    result = gamma * dLieAlg(T,Vr) + dot(cVr,dgamma(T, Vr))#TODO: pass in arguments for dgamma
+    result = gamma * dLieAlg(T,Vr) + cVr@dgamma(T, Vr)#TODO: pass in arguments for dgamma
     return result
 
 def dLieAlg(T,P):
@@ -74,26 +123,25 @@ def dLieAlg(T,P):
     p = P[:3] # inhomogeneous format
     R = T[:3,:3]
     t = T[:3,3]
-    t = transpose(np.array([t]))
-    Liealg = dot(R,p) + t
-    p1,p2,p3 = transpose(Liealg)[0]
-    anti_sym_mat = -np.array([[0,-p3,p2],[p3,0,-p1],[-p2,p1,0]])
-    result = np.hstack((np.diag([1,1,1]),anti_sym_mat))
+    t = np.array([t]).T
+    Liealg = R@p + t
+    asm = -anti_sym_mat(Liealg)
+    result = np.hstack((np.diag([1,1,1]),asm))
     result = np.vstack((result,np.zeros(6)))
     return result
 
 def dalpha(T, Vr, cVc):#TODO: add more arguments for dopt
     """Derivative of alpha"""
-    cVr = dot(T,Vr)
-    result = dot(transpose(cVr),dcVc()) + dot(transpose(cVc),dLieAlg(T,Vr)) #TODO:finish dcVc
+    cVr = T@Vr
+    result = cVr.T@dcVc() + cVc.T@dLieAlg(T,Vr) #TODO:finish dcVc
 
     return result
 
 def dbeta(T,Vr):
     """Derivative of beta"""
-    cVrT = transpose(dot(T,Vr))
+    cVrT = np.dot(T,Vr).T
     dliealg = dLieAlg(T, Vr)
-    result = 2*dot(cVrT,dliealg)
+    result = 2*cVrT@dliealg
     return result
 
 def dgamma(T, Vr, cVc):
@@ -107,7 +155,7 @@ def dopt(field):
     Instead of directly compute the DFM of dv/dp, it is better to transfer 3D position into a 2D camera coordinate, and then apply 2D DFM
     """
     #TODO: compute a 2-dimension central difference + chain rule
-    result = dot(field.central_difference(),dP_cam())
+    result = np.dot(field.central_difference(),dP_cam())
     return result
 
 def dP_cam():
@@ -119,6 +167,68 @@ def dcVc(T, Pr):
     Dpr = dLieAlg(T, Pr)
     result = dopt()*Dpr
     return result
+
+def objective_func(x, cVcs, Vrs):
+    #TODO: consider if use cVcs or use the optical fields?
+    """
+    compute fun for optimization algorithms
+    here, if there are n points in one image, fun returns [3nx1].
+    x: [6x1] Lie Alg
+    """
+    T = Alg2Group(x)
+    result = Ji(cVcs[0], T, Vrs[0])
+    for i in range(1,cVcs):
+        ji = Ji(cVcs[i], T, Vrs[i])
+        result = np.vstack((result,ji))
+    return result
+
+def derivative(x, field, Vrs, cVc_positions):
+    # TODO: complete this function
+    """
+    compute the derivative
+    """
+    
+
+def gauss_newton(f, jac, x0, max_iter=100, tol=1e-6):
+    """
+    Gauss Newton for optimization
+    """
+    #TODO: complete this function
+    x = x0
+    for i in range(max_iter):
+        fx = f(x)
+        Jx = jac(x)
+        dx = np.linalg.solve(Jx.T @ Jx, -Jx.T @ fx)
+        x += dx
+        if np.linalg.norm(dx) < tol:
+            break
+    return x
+
+def least_squires(f, x0, jac, method = 'lm'):
+    """
+    Levenberg-Marquardt, dogleg and trf for optimization. Use scipy implementation.
+    method could be {'trf','lm','dogbox'}
+    """
+    #TODO: complete this function
+    kwargs = {}
+    x = scipy.optimize.least_squares(f, x0, jac, method = method, kwargs = kwargs)
+    mu = mu0
+    for i in range(max_iter):
+        fx = f(x)
+        Jx = jac(x)
+        H = Jx.T @ Jx
+        g = Jx.T @ fx
+        dx = np.linalg.solve(H + mu * np.eye(H.shape[0]), -g)
+        x += dx
+        if np.linalg.norm(dx) < tol:
+            break
+        else:
+            mu *= 10
+    return x
+
+def steepest_descent():
+    #TODO: Implement it if still have time
+    return
 
 def fine_optimize(M_init, P_r, K, optical_map, depth_map0, depth_map1, dt):
     """fine opt is implemented in a gradient descent/steepest ascent manner"""
