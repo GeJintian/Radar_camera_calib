@@ -5,16 +5,17 @@ from utils.helpers import Cam2World, World2Cam, Doppler_velocity, Pos2Vel, Pos_t
 
 
 class optical_field():
-    def __init__(self, optical_map, depth_map0, depth_map1, dt, K) -> None:
+    def __init__(self, optical_map, depth_map0, depth_map1, K, dt, dp, dq, dr) -> None:
         # dt is the time interval between each image
         self.optical_map = optical_map
         self.depth_map0 = depth_map0
         self.depth_map1 = depth_map1
         self.dt = dt
         self.k = K
+        self.dp = [dp,dq,dr] # For x,y,z
     
     def get_next_opt(self, u, v):
-        return (u+np.round(self.optical_map[v][u][0]), v+np.round(self.optical_map[v][u][1])) #TODO: Check, is the first output for u-axis?
+        return (u+np.round(self.optical_map[v][u][0]), v+np.round(self.optical_map[v][u][1])) #TODO: Check, for raft, is the first output for u-axis?
 
     def get_dep0(self, u, v):
         return self.depth_map0[np.round(v)][np.round(u)]
@@ -38,12 +39,28 @@ class optical_field():
         return self.get_velocity_uv(u[0],v[0])
 
     #We might need bilinear interpolation and central difference for optical field
-    def central_difference(self, u, v):
+    def central_difference(self, P):
         """
-        Result should be [3*2]
+        Result should be [4*4] ([3x3]+stack)
         """
-        #TODO:finish implementation of 2-dim central difference
+        result = np.zeros((4,4))
+        for j in range(3):
+            for i in range(3):
+                fdm = self.fdm(P,self.dp[j],j)
+                result[i][j] = fdm[i][0]
         return
+    
+    def fdm(self, p, dp, axis):
+        """
+        finite difference method.
+        dp should be one-dimension, while axis indicates the axis
+        return (func(p+dp)-func(p-dp))/2dp
+        """
+        p[axis] += dp
+        f0 = self.get_velocity(p)
+        p[axis] -= 2*dp
+        f1 = self.get_velocity(p)
+        return (f0-f1)/(2*dp)
 
 def anti_sym_mat(phi):
     """
@@ -109,13 +126,14 @@ def J(cVcs, T, Vrs):
         loss += ji.T@ji
     return loss
 
-def dJi(cVc, T, Vr):
+def dJi(Pr:np.ndarray, T:np.ndarray, Vr:np.ndarray, field:optical_field)->np.ndarray:
     """differentiate of Ji"""
     cVr = T@Vr
+    cVc = field.get_velocity(T@Pr)
     alpha = cVc.T@cVr # should be scalar
     beta = cVr.T@cVr # should be scalar
     gamma = alpha-beta
-    result = gamma * dLieAlg(T,Vr) + cVr@dgamma(T, Vr)#TODO: pass in arguments for dgamma
+    result = gamma * dLieAlg(T,Vr) + cVr@dgamma(T, Vr, Pr, field)
     return result
 
 def dLieAlg(T,P):
@@ -130,10 +148,12 @@ def dLieAlg(T,P):
     result = np.vstack((result,np.zeros(6)))
     return result
 
-def dalpha(T, Vr, cVc):#TODO: add more arguments for dopt
+def dalpha(T, Vr, Pr, field:optical_field):
     """Derivative of alpha"""
+    cPc = T@Pr
     cVr = T@Vr
-    result = cVr.T@dcVc() + cVc.T@dLieAlg(T,Vr) #TODO:finish dcVc
+    cVc = field.get_velocity(cPc)
+    result = cVr.T@(field.central_difference(cPc)@dLieAlg(T,Pr)) + cVc.T@dLieAlg(T,Vr)
 
     return result
 
@@ -144,52 +164,61 @@ def dbeta(T,Vr):
     result = 2*cVrT@dliealg
     return result
 
-def dgamma(T, Vr, cVc):
+def dgamma(T, Vr, Pr, field):
     """Derivative of alpha-beta"""
-    result = dalpha(T,Vr, cVc) - dbeta(T,Vr) #TODO:add more arguments
+    result = dalpha(T,Vr, Pr, field) - dbeta(T,Vr)
     return result
 
-def dopt(field):
-    """
-    Derivative of optical flow velocity. Using central difference.
-    Instead of directly compute the DFM of dv/dp, it is better to transfer 3D position into a 2D camera coordinate, and then apply 2D DFM
-    """
-    #TODO: compute a 2-dimension central difference + chain rule
-    result = np.dot(field.central_difference(),dP_cam())
-    return result
+# def dcVc(T, Pr, field:optical_field):
+#     """Derivative of cVc. dcVc = dopt*dLieAlg(T,Pr) """
+#     Dpr = dLieAlg(T, Pr)
+#     result = dopt()*Dpr
+#     return result
 
-def dP_cam():
-    #TODO: compute the derivative of P_cam against P_world
-    return
 
-def dcVc(T, Pr):
-    """Derivative of cVc. dcVc = dopt*dLieAlg(T,Pr) """
-    Dpr = dLieAlg(T, Pr)
-    result = dopt()*Dpr
-    return result
+# def dopt(cPc,field:optical_field):
+#     """
+#     Derivative of optical flow velocity. Using central difference.
+#     Instead of directly compute the FDM of dv/dp, it is better to transfer 3D position into a 2D camera coordinate, and then apply 2D FDM
+#     """
+#     #TODO: compute a 2-dimension central difference + chain rule
+#     result = np.dot(field.central_difference(),dP_cam())
+#     return result
 
-def objective_func(x, cVcs, Vrs):
-    #TODO: consider if use cVcs or use the optical fields?
+# def dP_cam():
+#     #TODO: compute the derivative of P_cam against P_world
+#     return
+
+def objective_func(x, position, fields, Vrs):
     """
     compute fun for optimization algorithms
     here, if there are n points in one image, fun returns [3nx1].
     x: [6x1] Lie Alg
     """
     T = Alg2Group(x)
+    cVcs = []
+    for p in range(len(position)):
+        v = fields[p].get_velocity(T@position[p])
+        cVcs.append(v)
     result = Ji(cVcs[0], T, Vrs[0])
     for i in range(1,cVcs):
         ji = Ji(cVcs[i], T, Vrs[i])
         result = np.vstack((result,ji))
     return result
 
-def derivative(x, field, Vrs, cVc_positions):
-    # TODO: complete this function
+def derivative(x, fields, Vrs, position):
     """
-    compute the derivative
+    compute the derivative for optimization algorithms
+    x: optimization variaty, which is [6x1] Lie alg
+    field: optical field for that x
     """
-    
+    T = Alg2Group(x)
+    result = dJi(position[0],T,Vrs[0],fields[0])
+    for i in range(1,len(fields)):
+        result.vstack(dJi(position[i],T,Vrs[i],fields[i]))
+    return result
 
-def gauss_newton(f, jac, x0, max_iter=100, tol=1e-6):
+def gn(f, jac, x0, max_iter=1000, tol=1e-6):
     """
     Gauss Newton for optimization
     """
@@ -204,7 +233,7 @@ def gauss_newton(f, jac, x0, max_iter=100, tol=1e-6):
             break
     return x
 
-def least_squires(f, x0, jac, method = 'lm'):
+def least_squares(f, x0, jac, method = 'lm'):
     """
     Levenberg-Marquardt, dogleg and trf for optimization. Use scipy implementation.
     method could be {'trf','lm','dogbox'}

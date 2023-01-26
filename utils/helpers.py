@@ -51,7 +51,7 @@ def World2Cam(K,P):
     cu = K[0][2]
     cv = K[1][2]
     d = x
-    u = np.int(np.round(cu - f_u*y/x))
+    u = np.int(np.round(cu - f_u*y/x))#TODO: consider using interpolation
     v = np.int(np.round(cv - f_v*z/x))
 
     return np.array([[u],[v]])
