@@ -206,11 +206,12 @@ def objective_func(x, position, fields, Vrs):
         result = np.vstack((result,ji))
     return result
 
-def derivative(x, fields, Vrs, position):
+def derivative(x, position, fields, Vrs):
     """
     compute the derivative for optimization algorithms
     x: optimization variaty, which is [6x1] Lie alg
     field: optical field for that x
+    return: [6]
     """
     T = Alg2Group(x)
     result = dJi(position[0],T,Vrs[0],fields[0])
@@ -218,53 +219,39 @@ def derivative(x, fields, Vrs, position):
         result.vstack(dJi(position[i],T,Vrs[i],fields[i]))
     return result
 
-def gn(f, jac, x0, max_iter=1000, tol=1e-6):
+def gn(f, jac, x0, fields, Vrs, position, max_iter=1000, tol=1e-6):
     """
     Gauss Newton for optimization
     """
-    #TODO: complete this function
     x = x0
     for i in range(max_iter):
-        fx = f(x)
-        Jx = jac(x)
+        fx = f(x, position, fields, Vrs)
+        Jx = jac(x, position, fields, Vrs)
         dx = np.linalg.solve(Jx.T @ Jx, -Jx.T @ fx)
         x += dx
         if np.linalg.norm(dx) < tol:
             break
     return x
 
-def least_squares(f, x0, jac, method = 'lm'):
+def least_squares(f, x0, jac, fields, Vrs, position, method = 'lm'):
     """
     Levenberg-Marquardt, dogleg and trf for optimization. Use scipy implementation.
     method could be {'trf','lm','dogbox'}
     """
-    #TODO: complete this function
-    kwargs = {}
+    kwargs = {"position":position, "fields": fields, "Vrs":Vrs}
     x = scipy.optimize.least_squares(f, x0, jac, method = method, kwargs = kwargs)
-    mu = mu0
-    for i in range(max_iter):
-        fx = f(x)
-        Jx = jac(x)
-        H = Jx.T @ Jx
-        g = Jx.T @ fx
-        dx = np.linalg.solve(H + mu * np.eye(H.shape[0]), -g)
-        x += dx
-        if np.linalg.norm(dx) < tol:
-            break
-        else:
-            mu *= 10
     return x
 
 def steepest_descent():
     #TODO: Implement it if still have time
     return
 
-def fine_optimize(M_init, P_r, K, optical_map, depth_map0, depth_map1, dt):
+def fine_optimize(M_init, Prs, Vrs, K, optical_maps, depth_map0s, depth_map1s, dt):
     """fine opt is implemented in a gradient descent/steepest ascent manner"""
-    field = optical_field(optical_map, depth_map0, depth_map1, dt, K)
-    for i in P_r:
-        p_c = Pos_transform(M_init,i)
-        u,v = World2Cam(K, p_c)
+    fields = []
+    for i in range(len(optical_maps)):
+        fields.append(optical_field(optical_maps[i], depth_map0s[i], depth_map1s[i], dt, K, 0.001, 0.001, 0.001))
+    x0 = Group2Alg(M_init)
+    x = gn(J, dJi, x0, fields, Vrs, Prs)
 
-
-    return
+    return Alg2Group(x)
