@@ -27,7 +27,6 @@ def Cam2World(K,P):
     P: [3x1] camera point [[u],[v],[d]]
     return: np.array([4x1]) 3D camera point [[x],[y],[z],[1]]
     """
-
     u,v,d = P
     f_u = K[0][0]
     f_v = K[1][1]
@@ -39,18 +38,20 @@ def Cam2World(K,P):
 
     return np.array([x,y,z,[1]])
 
+def is_close(a, b, rel_tol=1e-09, abs_tol=1e-30):
+    return abs(a - b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
+
 def World2Cam(K,P):
     """
     K: [3x3] camera intrinsics
     P: [4x1] camera point [[x],[y],[z],[1]]
-    return: np.array([2x1]) 2D camera point [[u],[v]]
+    return: np.array([2x1]) 2D camera point [[u],[v]]. Origin is on the image center
     """
     x,y,z = P[:-1]
     f_u = K[0][0]
     f_v = K[1][1]
     cu = K[0][2]
     cv = K[1][2]
-    d = x
     u = np.int(np.round(cu - f_u*y/x))#TODO: consider using interpolation
     v = np.int(np.round(cv - f_v*z/x))
 
@@ -70,7 +71,7 @@ def Doppler_velocity(v,p):
 
     return vd
 
-def Pos2Vel(p1,p2,t):#TODO: check if this is used
+def Pos2Vel(p1,p2,t):
     """
     p1, p2: [3x1] two positions in world coordinate
     t: time interval
@@ -89,7 +90,6 @@ def Pos_transform(T, P):
     P: [4X1] position to be transformed
     return: P1 [4x1] transformed result    
     """
-
     P1 = np.dot(T,P)
 
     return P1

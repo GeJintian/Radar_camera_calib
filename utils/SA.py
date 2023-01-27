@@ -24,11 +24,11 @@ class SimulatedAnnealingBase():
     ----------------------
     """
 
-    def __init__(self, problem, x0, T_max=100, T_min=1e-7, L=300, max_stay_counter=150, stop_value = 0, **kwargs):
+    def __init__(self, problem, x0, T_max=100, T_min=1e-7, L=1000, max_stay_counter=150, stop_value = 0, **kwargs):
         assert T_max > T_min > 0, 'T_max > T_min > 0'
 
-        self.stop_value = stop_value
         self.problem = problem
+        self.stop_value = -100*self.problem.get_all_pts_number()
         self.T_max = T_max  # initial temperature
         self.T_min = T_min  # end temperature
         self.L = int(L)  # num of iteration under every temperature（also called Long of Chain）
@@ -50,8 +50,8 @@ class SimulatedAnnealingBase():
     def get_new_x(self, x):
         u = np.random.uniform(-1, 1, size=self.n_dim)
         x_new = np.zeros(x.shape)
-        x_new[:4] = x[:4] + 2 * np.sign(u[:4]) * self.T * ((1 + 1.0 / self.T) ** np.abs(u[:4]) - 1.0)
-        x_new[4:] = x[4:] + 0.2 * np.sign(u[4:]) * self.T * ((1 + 1.0 / self.T) ** np.abs(u[4:]) - 1.0)
+        x_new[:4] = x[:4] + 0.1 * np.sign(u[:4]) * self.T * ((1 + 1.0 / self.T) ** np.abs(u[:4]) - 1.0)
+        x_new[4:] = x[4:] + 0.05 * np.sign(u[4:]) * self.T * ((1 + 1.0 / self.T) ** np.abs(u[4:]) - 1.0)
         return x_new
 
     def cool_down(self):
@@ -92,7 +92,7 @@ class SimulatedAnnealingBase():
             if stay_counter > self.max_stay_counter or self.isclose(self.best_y_history[-1],self.stop_value):
                 stop_code = 'Stay unchanged in the last {stay_counter} iterations'.format(stay_counter=stay_counter)
                 break
-
+        print(stop_code)
         return self.best_x, self.best_y
 
 

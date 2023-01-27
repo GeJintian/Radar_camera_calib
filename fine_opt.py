@@ -253,5 +253,4 @@ def fine_optimize(M_init, Prs, Vrs, K, optical_maps, depth_map0s, depth_map1s, d
         fields.append(optical_field(optical_maps[i], depth_map0s[i], depth_map1s[i], dt, K, 0.001, 0.001, 0.001))
     x0 = Group2Alg(M_init)
     x = gn(J, dJi, x0, fields, Vrs, Prs)
-
     return Alg2Group(x)

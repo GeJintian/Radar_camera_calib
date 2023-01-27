@@ -1,9 +1,9 @@
 import numpy as np
 
-from utils.helpers import Pos_transform, World2Cam, build_matrix
+from utils.helpers import Pos_transform, World2Cam, build_matrix, is_close
 from utils.SA import SimulatedAnnealingBase
 
-class projection_problem():
+class single_projection_problem():
     """This is the class of projection problem. We want to make sure all projected points are within the mask"""
     def __init__(self, K, mask, P_r,imfile) -> None:
         self.mask = mask
@@ -56,8 +56,25 @@ class projection_problem():
     def get_all_pts_number(self):
         return len(self.P_r)
     
+class batch_projection_problem():
+    def __init__(self,problems) -> None:
+        self.problems = problems
+    def objective_function(self,t):
+        result = 0
+        for p in self.problems:
+            result += p.objective_function(t)
+        return result
+    def get_all_pts_number(self):
+        result = 0
+        for p in self.problems:
+            result += p.get_all_pts_number()
+        return result
+    def update(self,t):
+        for p in self.problems:
+            if not is_close(p.objective_function(t),-100*p.get_all_pts_number()):
+                self.problems.remove(p)
 
-def coarse_optimize(M_t_init, P_r, K, mask,imfile):
+def coarse_optimize(M_t_init, problem,imfile=None):
     """
     Run SA to maximize objective function
     M_t_init: [7x1], quaternion + transition
@@ -67,13 +84,13 @@ def coarse_optimize(M_t_init, P_r, K, mask,imfile):
     T_max = 50 # max temperature
     T_min = 1e-7 # min temperature
     k = 100 # number of success
-    stop_value = 0
 
-    problem = projection_problem(K, mask, P_r,imfile)
-
-    sa = SimulatedAnnealingBase(problem, M_t_init, T_max, T_min, k, stop_value = stop_value)
+    sa = SimulatedAnnealingBase(problem, M_t_init, T_max, T_min, k)
     best_M_t, best_score = sa.run()
 
-    print("In "+imfile+", best score is"+str(best_score))
+    if imfile is not None:
+        print("In "+imfile+", best score is"+str(best_score))
+    else:
+        print("Best score is"+str(best_score))
 
     return best_M_t

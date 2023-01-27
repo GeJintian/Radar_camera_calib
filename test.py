@@ -1,4 +1,5 @@
 import numpy as np
+from utils.helpers import *
 
 
 # pt_file = 'result/radar/1672812488_633140000.npy'
@@ -27,8 +28,18 @@ class test():
 def addition(x):
     return x+1        
 
+def load_camera_calib(cfg):
+    config = np.load(cfg)
+    k = config.reshape((3,3))
+    return k
+
 if __name__=="__main__":
-    a = test(1)
-    print(a.get_y())
-    a.add_x(2)
-    print(a.get_y())
+    M_t_init = [0,0,0,0,-3/100,-5.9/100,8.75/100]
+
+    T = build_matrix(M_t_init)
+
+    a=np.array([[1],[1],[1],[1]])
+    k=load_camera_calib('result/calibration.npy')
+    b = T@a
+    c = World2Cam(k,b)
+    print(c)

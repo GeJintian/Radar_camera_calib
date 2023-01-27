@@ -14,7 +14,7 @@ import cv2
 #from raft_core.utils import InputPadder
 from utils.helpers import *
 from utils.visualize import seg_mask, viz_optical, viz_mask, print_minmax, viz_pts
-from coarse_opt import coarse_optimize
+from coarse_opt import coarse_optimize, single_projection_problem, batch_projection_problem
 
 
 DEVICE = 'cuda'
@@ -56,7 +56,7 @@ def mask(rgb,edge):
                 rgb[i][j] = [255,255,255]
                 
 
-def demo(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment_file):
+def single_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment_file):
     # model = torch.nn.DataParallel(RAFT(args))
     # model.load_state_dict(torch.load(args.model))
 
@@ -102,11 +102,10 @@ def demo(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segm
             seg_result = inference_segmentor(segment_model, imfile)[0]
             remasking = remask(seg_result,12) # 12 is the idx of person
             new_mask = BFS(remasking)
-            
-            #viz_mask(new_mask,i)
-            #viz_optical(image1, flow_up, seg_result, i)
 
-            M_t = coarse_optimize(M_t_init, P_r, K, new_mask,imfile.split('/')[-1])
+            problem = single_projection_problem(K, new_mask, P_r)
+            
+            M_t = coarse_optimize(M_t_init, problem, imfile.split('/')[-1])
             M_t_init = M_t
             x,y,z,w = M_t_init[:4]
             mag = np.sqrt(x*x+y*y+z*z+w*w) + 0.00001 #avoid 0
@@ -117,6 +116,65 @@ def demo(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segm
         print(M_t_init)
         print("There are "+str(count)+" frames with no moving")
 
+def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment_file):
+    # model = torch.nn.DataParallel(RAFT(args))
+    # model.load_state_dict(torch.load(args.model))
+
+    # model = model.module
+    # model.to(DEVICE)
+    # model.eval()
+    
+    segment_model = init_segmentor(segment_cfg, segment_ckpts, 'cuda:0')
+    segment_model.eval()
+    
+    K = load_camera_calib(camera_calib_file)
+    f = open(alignment_file,'r')
+    alignment = f.read()
+    alignment = json.loads(alignment)
+    f.close()
+
+    with torch.no_grad():
+        images = glob.glob(os.path.join(image_path, '*.png')) + \
+                 glob.glob(os.path.join(image_path, '*.jpg'))
+        images = sorted(images)
+        #print(images)
+        #for imfile1, imfile2 in zip(images[:-1], images[1:]):
+        count = 0
+        problem_sets = []
+        for i in range(len(images)):
+            #image1 = load_image(imfile1)
+            #image2 = load_image(imfile2)
+            #print(image1.shape)
+            #padder = InputPadder(image1.shape)
+            #image1, image2 = padder.pad(image1, image2)
+
+            #_, flow_up = model(image1, image2, iters=20, test_mode=True)
+
+            # coarse optimize
+            imfile = images[i]
+            ptfile = os.path.join(point_path,alignment[imfile.split('/')[-1]])
+            dpfile = os.path.join(depth_path,alignment[imfile.split('/')[-1]])
+            P_r = load_points(ptfile)
+            if len(P_r)==0:
+                #print("In this frame, there is no moving items")
+                count = count + 1
+                continue
+            seg_result = inference_segmentor(segment_model, imfile)[0]
+            remasking = remask(seg_result,12) # 12 is the idx of person
+            new_mask = BFS(remasking)
+            print(P_r)
+            sys.exit()
+            problem = single_projection_problem(K, new_mask, P_r, imfile.split('/')[-1])
+            problem_sets.append(problem)
+        
+        problems = batch_projection_problem(problem_sets)
+        print("In the beginning, the score is", problems.objective_function(M_t_init))
+        M_t = coarse_optimize(M_t_init, problems)
+        M_t_init = M_t
+        x,y,z,w = M_t_init[:4]
+        mag = np.sqrt(x*x+y*y+z*z+w*w) + 0.00001 #avoid 0
+        M_t_init[:4] = [x,y,z,w]/mag        
+        print(M_t_init)
 
 if __name__ == '__main__':
     # parser = argparse.ArgumentParser()
@@ -134,7 +192,9 @@ if __name__ == '__main__':
     image_path = 'result/img'
     segment_cfg = '/home/gejintian/workspace/mmlab/mmsegmentation/configs/segformer/segformer_mit-b2_512x512_160k_ade20k.py'
     segment_ckpts = 'models/b2.pth'
-    M_t_init = [0,0,0,0,-3/100,-5.9/100,8.75/100]
+    #M_t_init = [0,0,0,0,-3/100,-5.9/100,8.75/100]
+    M_t_init = [0,0,0,0,-4/100,-4/100,7/100]
     alignment = 'result/alignment.json'
 
-    demo(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment)
+    #single_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment)
+    batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment)
