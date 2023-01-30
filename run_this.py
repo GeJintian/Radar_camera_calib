@@ -10,11 +10,12 @@ import torch
 from mmseg.apis import inference_segmentor, init_segmentor
 import cv2
 
-#from raft_core.raft import RAFT
-#from raft_core.utils import InputPadder
+from utils.raft_core.raft import RAFT
+from utils.raft_core.utils import InputPadder
 from utils.helpers import *
 from utils.visualize import seg_mask, viz_optical, viz_mask, print_minmax, viz_pts
 from coarse_opt import coarse_optimize, single_projection_problem, batch_projection_problem
+from fine_opt import optical_field, fine_optimize
 
 
 DEVICE = 'cuda'
@@ -33,14 +34,16 @@ def load_RGB(imfile):
 def load_points(ptfile):
     all_points = np.load(ptfile)
     moving_points = []
+    velocity = []
     for pt in all_points:
         if abs(pt[4]) > 0.001: # larger than 0.1 cm/s
             c = [np.array([i]) for i in pt[:3]]
             c.append(np.array([1]))
             c=np.array(c)
             moving_points.append(c)
+            velocity.append(pt[4])
 
-    return moving_points
+    return moving_points, velocity
 
 def load_camera_calib(cfg):
     config = np.load(cfg)
@@ -117,13 +120,7 @@ def single_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg
         print("There are "+str(count)+" frames with no moving")
 
 def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment_file):
-    # model = torch.nn.DataParallel(RAFT(args))
-    # model.load_state_dict(torch.load(args.model))
 
-    # model = model.module
-    # model.to(DEVICE)
-    # model.eval()
-    
     segment_model = init_segmentor(segment_cfg, segment_ckpts, 'cuda:0')
     segment_model.eval()
     
@@ -137,11 +134,13 @@ def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg,
         images = glob.glob(os.path.join(image_path, '*.png')) + \
                  glob.glob(os.path.join(image_path, '*.jpg'))
         images = sorted(images)
-        #print(images)
-        #for imfile1, imfile2 in zip(images[:-1], images[1:]):
+
         count = 0
         problem_sets = []
-        for i in range(len(images)):
+        img_names = [] # store (im0,im1) for depth and raft
+
+        # coarse optimize
+        for i in range(len(images)-1):
             #image1 = load_image(imfile1)
             #image2 = load_image(imfile2)
             #print(image1.shape)
@@ -150,11 +149,10 @@ def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg,
 
             #_, flow_up = model(image1, image2, iters=20, test_mode=True)
 
-            # coarse optimize
             imfile = images[i]
+            img_names.append((images[i], images[i+1]))
             ptfile = os.path.join(point_path,alignment[imfile.split('/')[-1]])
-            dpfile = os.path.join(depth_path,alignment[imfile.split('/')[-1]])
-            P_r = load_points(ptfile)
+            P_r, V_r = load_points(ptfile)
             if len(P_r)==0:
                 #print("In this frame, there is no moving items")
                 count = count + 1
@@ -162,8 +160,6 @@ def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg,
             seg_result = inference_segmentor(segment_model, imfile)[0]
             remasking = remask(seg_result,12) # 12 is the idx of person
             new_mask = BFS(remasking)
-            print(P_r)
-            sys.exit()
             problem = single_projection_problem(K, new_mask, P_r, imfile.split('/')[-1])
             problem_sets.append(problem)
         
@@ -173,7 +169,22 @@ def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg,
         M_t_init = M_t
         x,y,z,w = M_t_init[:4]
         mag = np.sqrt(x*x+y*y+z*z+w*w) + 0.00001 #avoid 0
-        M_t_init[:4] = [x,y,z,w]/mag        
+        M_t_init[:4] = [x,y,z,w]/mag
+
+        # fine optimize
+        idx = problems.update(M_t_init)
+        # model = torch.nn.DataParallel(RAFT(args))
+        # model.load_state_dict(torch.load(args.model))
+
+        # model = model.module
+        # model.to(DEVICE)
+        # model.eval()
+        for id in idx:
+            img_names.pop(id)
+        for imgs in img_names:
+            ptfile = os.path.join(point_path,alignment[imfile.split('/')[-1]])
+            P_r, V_r = load_points(ptfile)
+
         print(M_t_init)
 
 if __name__ == '__main__':
@@ -193,7 +204,7 @@ if __name__ == '__main__':
     segment_cfg = '/home/gejintian/workspace/mmlab/mmsegmentation/configs/segformer/segformer_mit-b2_512x512_160k_ade20k.py'
     segment_ckpts = 'models/b2.pth'
     #M_t_init = [0,0,0,0,-3/100,-5.9/100,8.75/100]
-    M_t_init = [0,0,0,0,-4/100,-4/100,7/100]
+    M_t_init = [0,0,0,0,-0/100,-0/100,0/100]
     alignment = 'result/alignment.json'
 
     #single_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment)

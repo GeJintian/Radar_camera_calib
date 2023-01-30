@@ -59,6 +59,7 @@ class single_projection_problem():
 class batch_projection_problem():
     def __init__(self,problems) -> None:
         self.problems = problems
+
     def objective_function(self,t):
         result = 0
         for p in self.problems:
@@ -70,9 +71,12 @@ class batch_projection_problem():
             result += p.get_all_pts_number()
         return result
     def update(self,t):
-        for p in self.problems:
+        idx = []
+        for i in range(len(self.problems)):
+            p = self.problems[i]
             if not is_close(p.objective_function(t),-100*p.get_all_pts_number()):
-                self.problems.remove(p)
+                idx.append(i)
+        return idx
 
 def coarse_optimize(M_t_init, problem,imfile=None):
     """
