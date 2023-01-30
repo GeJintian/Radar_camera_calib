@@ -5,10 +5,11 @@ from utils.SA import SimulatedAnnealingBase
 
 class single_projection_problem():
     """This is the class of projection problem. We want to make sure all projected points are within the mask"""
-    def __init__(self, K, mask, P_r,imfile) -> None:
+    def __init__(self, K, mask, P_r, V_r, imfile) -> None:
         self.mask = mask
         self.K = K
         self.P_r = P_r
+        self.V_r = V_r # V_r is for fine opt
         self.n = len(P_r)
         self.h, self.w = self.mask.shape
         self.file = imfile

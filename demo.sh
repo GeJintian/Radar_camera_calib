@@ -1,1 +1,1 @@
-python run.py --model=models/raft-things.pth --path=../people/images
+python run_this.py --model=models/raft-things.pth --path=../people/images

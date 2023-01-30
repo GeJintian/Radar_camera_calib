@@ -20,11 +20,18 @@ from fine_opt import optical_field, fine_optimize
 
 DEVICE = 'cuda'
 
+def interpolate_helper(d_image, segmentation, u, v):
+    h,w = d_image.shape
+    return
+
+def depth_interpolate(d_image, segmentation):
+    h,w = d_image.shape
+    interpolate_helper(d_image,0,0)
+    return d_image
 
 def load_depth(dfile):
-    img = cv2.imread(dfile)
-
-    return img
+    d_image = np.load(dfile)
+    return d_image
 
 def load_RGB(imfile):
     img = np.array(Image.open(imfile)).astype(np.uint8) # read left image on RGB format
@@ -119,8 +126,7 @@ def single_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg
         print(M_t_init)
         print("There are "+str(count)+" frames with no moving")
 
-def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment_file):
-
+def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment_file,raft_ckpts,args):
     segment_model = init_segmentor(segment_cfg, segment_ckpts, 'cuda:0')
     segment_model.eval()
     
@@ -141,26 +147,19 @@ def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg,
 
         # coarse optimize
         for i in range(len(images)-1):
-            #image1 = load_image(imfile1)
-            #image2 = load_image(imfile2)
-            #print(image1.shape)
-            #padder = InputPadder(image1.shape)
-            #image1, image2 = padder.pad(image1, image2)
-
-            #_, flow_up = model(image1, image2, iters=20, test_mode=True)
-
             imfile = images[i]
-            img_names.append((images[i], images[i+1]))
+            
             ptfile = os.path.join(point_path,alignment[imfile.split('/')[-1]])
             P_r, V_r = load_points(ptfile)
             if len(P_r)==0:
                 #print("In this frame, there is no moving items")
                 count = count + 1
                 continue
+            img_names.append((images[i], images[i+1]))
             seg_result = inference_segmentor(segment_model, imfile)[0]
             remasking = remask(seg_result,12) # 12 is the idx of person
             new_mask = BFS(remasking)
-            problem = single_projection_problem(K, new_mask, P_r, imfile.split('/')[-1])
+            problem = single_projection_problem(K, new_mask, P_r, V_r, imfile.split('/')[-1])
             problem_sets.append(problem)
         
         problems = batch_projection_problem(problem_sets)
@@ -168,34 +167,54 @@ def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg,
         M_t = coarse_optimize(M_t_init, problems)
         M_t_init = M_t
         x,y,z,w = M_t_init[:4]
-        mag = np.sqrt(x*x+y*y+z*z+w*w) + 0.00001 #avoid 0
+        mag = np.sqrt(x*x+y*y+z*z+w*w)
         M_t_init[:4] = [x,y,z,w]/mag
+        print("Finish coarse optimize")
 
         # fine optimize
         idx = problems.update(M_t_init)
-        # model = torch.nn.DataParallel(RAFT(args))
-        # model.load_state_dict(torch.load(args.model))
+        model = torch.nn.DataParallel(RAFT(args))
+        model.load_state_dict(torch.load(raft_ckpts))
 
-        # model = model.module
-        # model.to(DEVICE)
-        # model.eval()
+        model = model.module
+        model.to(DEVICE)
+        model.eval()
         for id in idx:
-            img_names.pop(id)
-        for imgs in img_names:
-            ptfile = os.path.join(point_path,alignment[imfile.split('/')[-1]])
-            P_r, V_r = load_points(ptfile)
-
+            img_names[id] = None
+            problem_sets[id] = None
+        fields = []
+        P_rs = []
+        V_rs = []
+        for idx in range(len(img_names)):
+            imgs = img_names[idx]
+            if imgs is not None:
+                im1 = os.path.join(image_path,imgs[0].split('/')[-1])
+                im2 = os.path.join(image_path,imgs[1].split('/')[-1])
+                image1 = load_RGB(im1)
+                image2 = load_RGB(im2)
+                padder = InputPadder(image1.shape)
+                image1, image2 = padder.pad(image1, image2)
+                _, flow_up = model(image1, image2, iters=20, test_mode=True)
+                flow_up = flow_up[0].cpu()
+                image1 = load_depth(os.path.join(depth_path,imgs[0].split('/')[-1].split('.')[0]+'.npy'))
+                image2 = load_depth(os.path.join(depth_path,imgs[1].split('/')[-1].split('.')[0]+'.npy'))
+                field = optical_field(flow_up,image1, image2, K, 0.1, 0.1, 0.1, 0.1)
+                P_r = problem_sets[idx].P_r
+                V_r = problem_sets[idx].V_r
+                for p in range(len(P_r)):
+                    pr = P_r[p]
+                    P_rs.append(pr)
+                    V_rs.append(V_r[p]*pr/np.linalg.norm(pr))
+                    fields.append(field)
+        M_t_init = fine_optimize(M_t_init, P_rs, V_rs, fields)
         print(M_t_init)
 
 if __name__ == '__main__':
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument('--model', help="restore checkpoint")
-    # parser.add_argument('--path', help="dataset for evaluation")
-    # parser.add_argument('--small', action='store_true', help='use small model')
-    # parser.add_argument('--mixed_precision', action='store_true', help='use mixed precision')
-    # parser.add_argument('--alternate_corr', action='store_true', help='use efficent correlation implementation')
-    # args = parser.parse_args()
-
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--small', action='store_true', help='use small model')
+    parser.add_argument('--mixed_precision', action='store_true', help='use mixed precision')
+    parser.add_argument('--alternate_corr', action='store_true', help='use efficent correlation implementation')
+    args = parser.parse_args()
     point_path = 'result/radar'
     camera_calib_file = 'result/calibration.npy'
     depth_path = 'result/depth'
@@ -203,9 +222,10 @@ if __name__ == '__main__':
     image_path = 'result/img'
     segment_cfg = '/home/gejintian/workspace/mmlab/mmsegmentation/configs/segformer/segformer_mit-b2_512x512_160k_ade20k.py'
     segment_ckpts = 'models/b2.pth'
+    raft_ckpts = 'models/raft-things.pth'
     #M_t_init = [0,0,0,0,-3/100,-5.9/100,8.75/100]
-    M_t_init = [0,0,0,0,-0/100,-0/100,0/100]
+    M_t_init = [0,0,0,1,-0/100,-0/100,0/100]
     alignment = 'result/alignment.json'
 
     #single_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment)
-    batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment)
+    batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment, raft_ckpts,args)

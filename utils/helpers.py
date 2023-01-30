@@ -103,7 +103,7 @@ def build_matrix(t):
 
     x,y,z,w = t[:4]
     trans = t[4:]
-    mag = np.sqrt(x*x+y*y+z*z+w*w) + 0.00001
+    mag = np.sqrt(x*x+y*y+z*z+w*w)
     x,y,z,w = [x,y,z,w]/mag
     Ts = np.array([[trans[0]], [trans[1]], [trans[2]]])
     M_r = np.zeros((3,3))

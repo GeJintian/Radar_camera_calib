@@ -2,12 +2,13 @@ import numpy as np
 import scipy
 import cv2
 from utils.helpers import Cam2World, World2Cam, Doppler_velocity, Pos2Vel, Pos_transform, build_matrix
+import sys
 
 
 class optical_field():
     def __init__(self, optical_map, depth_map0, depth_map1, K, dt, dp, dq, dr) -> None:
         # dt is the time interval between each image
-        self.optical_map = optical_map
+        self.optical_u, self.optical_v = optical_map.numpy()
         self.depth_map0 = depth_map0
         self.depth_map1 = depth_map1
         self.dt = dt
@@ -15,12 +16,13 @@ class optical_field():
         self.dp = [dp,dq,dr] # For x,y,z
     
     def get_next_opt(self, u, v):
-        return (u+np.round(self.optical_map[v][u][0]), v+np.round(self.optical_map[v][u][1])) #TODO: Check, for raft, is the first output for u-axis?
+        return (u+np.round(self.optical_u[v][u]), v+np.round(self.optical_v[v][u])) #TODO: Check, for raft, is the first output for u-axis?
 
     def get_dep0(self, u, v):
         return self.depth_map0[np.round(v)][np.round(u)]
 
     def get_dep1(self, u, v):
+        print(u,v)
         return self.depth_map1[np.round(v)][np.round(u)]
 
     def get_velocity_uv(self,u,v):
@@ -85,7 +87,7 @@ def Group2Alg(T):
     for i in range(len(eigval)):
         if abs(eigval[i] - 1) < 1e-9:
             break
-    a = eigvec[i] #should be 1-dim
+    a = np.real(eigvec[i]) #should be 1-dim
     a = np.array([a]).T # transform to nx1
     phi = theta*a
 
@@ -112,7 +114,9 @@ def Alg2Group(xi):
     return result
 
 def Ji(cVc, T, Vr):
-    """return: compute Ji, which is the cost function for one single point"""
+    """
+    return: compute Ji, which is the cost function for one single point
+    """
     cVr = T@Vr
     alpha = cVc.T@cVr # should be scalar
     beta = cVr.T@cVr # should be scalar
@@ -246,11 +250,9 @@ def steepest_descent():
     #TODO: Implement it if still have time
     return
 
-def fine_optimize(M_init, Prs, Vrs, K, optical_maps, depth_map0s, depth_map1s, dt):
+def fine_optimize(M_init, Prs, Vrs, fields):
     """fine opt is implemented in a gradient descent/steepest ascent manner"""
-    fields = []
-    for i in range(len(optical_maps)):
-        fields.append(optical_field(optical_maps[i], depth_map0s[i], depth_map1s[i], dt, K, 0.001, 0.001, 0.001))
+    M_init = build_matrix(M_init)
     x0 = Group2Alg(M_init)
-    x = gn(J, dJi, x0, fields, Vrs, Prs)
+    x = gn(objective_func, derivative, x0, fields, Vrs, Prs)
     return Alg2Group(x)

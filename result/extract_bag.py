@@ -21,26 +21,28 @@ cam_info = bag.read_messages(cam_info)
 
 # depth_data
 n = 0
-for topic,msg,t in radar_data:
+for topic,msg,t in depth_data:
 
-    pct = pc2.read_points(msg)
-    #d_image = bridge.imgmsg_to_cv2(msg,"passthrough")
-    #d_image = d_image.copy()*1000.0
-    #d_image = d_image.astype(np.uint16)
+    #pct = pc2.read_points(msg)
+    d_image = bridge.imgmsg_to_cv2(msg,"32FC1")
+    d_image = np.array(d_image)
+    # d_image = d_image.copy()*1000.0
+    # d_image = d_image.astype(np.uint16)
+    #print(np.max(d_image))
     #k = np.array(list(msg.K))
     #print(msg)
-    is_moving = False
-    pct_np=np.array(list(pct))
-    for i in pct_np:
-        if abs(i[4])>0.001:
-            is_moving = True
-            n = n + 1
-    #np.save("calibration.npy",k)
+    # is_moving = False
+    # pct_np=np.array(list(pct))
+    # for i in pct_np:
+    #     if abs(i[4])>0.001:
+    #         is_moving = True
+    #         n = n + 1
+    # np.save("calibration.npy",k)
     #break
     #cv2.imwrite("depth/"+str(msg.header.stamp.secs)+"_"+str(msg.header.stamp.nsecs).zfill(9)+'.png',d_image)
+    np.save("depth/"+str(msg.header.stamp.secs)+"_"+str(msg.header.stamp.nsecs).zfill(9)+'.npy',d_image)
     #np.save("radar/"+str(msg.header.stamp.secs)+"_"+str(msg.header.stamp.nsecs).zfill(9)+'.npy',pct_np)
     # print(is_moving)
-    is_moving = False
+    #is_moving = False
     
 bag.close()
-print(n)
