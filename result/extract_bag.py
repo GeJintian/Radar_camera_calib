@@ -26,6 +26,7 @@ for topic,msg,t in depth_data:
     #pct = pc2.read_points(msg)
     d_image = bridge.imgmsg_to_cv2(msg,"32FC1")
     d_image = np.array(d_image)
+    print(msg)
     # d_image = d_image.copy()*1000.0
     # d_image = d_image.astype(np.uint16)
     #print(np.max(d_image))
@@ -38,9 +39,9 @@ for topic,msg,t in depth_data:
     #         is_moving = True
     #         n = n + 1
     # np.save("calibration.npy",k)
-    #break
+    break
     #cv2.imwrite("depth/"+str(msg.header.stamp.secs)+"_"+str(msg.header.stamp.nsecs).zfill(9)+'.png',d_image)
-    np.save("depth/"+str(msg.header.stamp.secs)+"_"+str(msg.header.stamp.nsecs).zfill(9)+'.npy',d_image)
+    #np.save("depth/"+str(msg.header.stamp.secs)+"_"+str(msg.header.stamp.nsecs).zfill(9)+'.npy',d_image)
     #np.save("radar/"+str(msg.header.stamp.secs)+"_"+str(msg.header.stamp.nsecs).zfill(9)+'.npy',pct_np)
     # print(is_moving)
     #is_moving = False
