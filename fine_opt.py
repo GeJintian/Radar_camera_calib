@@ -1,7 +1,7 @@
 import numpy as np
 import scipy
 import cv2
-from utils.helpers import Cam2World, World2Cam, Doppler_velocity, Pos2Vel, Pos_transform, build_matrix
+from utils.helpers import Cam2World, World2Cam, Doppler_velocity, Pos2Vel, Pos_transform, build_matrix, bilinear_interpolate
 import sys
 
 
@@ -16,14 +16,15 @@ class optical_field():
         self.dp = [dp,dq,dr] # For x,y,z
     
     def get_next_opt(self, u, v):
-        return (u+np.round(self.optical_u[v][u]), v+np.round(self.optical_v[v][u])) #TODO: Check, for raft, is the first output for u-axis?
+        du = bilinear_interpolate(self.optical_u, u, v)
+        dv = bilinear_interpolate(self.optical_v, u, v)
+        return (u+du, v+dv) #TODO: Check, for raft, is the first output for u-axis?
 
     def get_dep0(self, u, v):
-        return self.depth_map0[np.round(v)][np.round(u)]
+        return bilinear_interpolate(self.depth_map0, u, v)
 
     def get_dep1(self, u, v):
-        print(u,v)
-        return self.depth_map1[np.round(v)][np.round(u)]
+        return bilinear_interpolate(self.depth_map1, u, v)
 
     def get_velocity_uv(self,u,v):
         # return: [4x1]
@@ -50,7 +51,7 @@ class optical_field():
             for i in range(3):
                 fdm = self.fdm(P,self.dp[j],j)
                 result[i][j] = fdm[i][0]
-        return
+        return np.array(result)
     
     def fdm(self, p, dp, axis):
         """
@@ -158,7 +159,6 @@ def dalpha(T, Vr, Pr, field:optical_field):
     cVr = T@Vr
     cVc = field.get_velocity(cPc)
     result = cVr.T@(field.central_difference(cPc)@dLieAlg(T,Pr)) + cVc.T@dLieAlg(T,Vr)
-
     return result
 
 def dbeta(T,Vr):
@@ -205,7 +205,7 @@ def objective_func(x, position, fields, Vrs):
         v = fields[p].get_velocity(T@position[p])
         cVcs.append(v)
     result = Ji(cVcs[0], T, Vrs[0])
-    for i in range(1,cVcs):
+    for i in range(1,len(cVcs)):
         ji = Ji(cVcs[i], T, Vrs[i])
         result = np.vstack((result,ji))
     return result
@@ -220,7 +220,9 @@ def derivative(x, position, fields, Vrs):
     T = Alg2Group(x)
     result = dJi(position[0],T,Vrs[0],fields[0])
     for i in range(1,len(fields)):
-        result.vstack(dJi(position[i],T,Vrs[i],fields[i]))
+        dj = dJi(position[i],T,Vrs[i],fields[i])
+        result = np.vstack((result,dj))
+    result = np.array(result)
     return result
 
 def gn(f, jac, x0, fields, Vrs, position, max_iter=1000, tol=1e-6):

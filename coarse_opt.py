@@ -37,7 +37,7 @@ class single_projection_problem():
         for i in self.P_r:
             #print(i)
             p_c = Pos_transform(T,i)
-            u,v = World2Cam(self.K, p_c)
+            u,v = np.round(World2Cam(self.K, p_c)).astype(np.int)
             if v[0] < 0 or v[0] > self.h-1 or u[0] < 0 or u[0] > self.w-1:
                 sum_val += np.sqrt(((u[0]-self.centroid[0])/self.w)**2 + ((v[0]-self.centroid[1])/self.h)**2)
                 continue

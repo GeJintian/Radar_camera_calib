@@ -111,7 +111,7 @@ def single_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg
                 continue
             seg_result = inference_segmentor(segment_model, imfile)[0]
             remasking = remask(seg_result,12) # 12 is the idx of person
-            new_mask = BFS(remasking)
+            new_mask = BFS_mask(remasking)
 
             problem = single_projection_problem(K, new_mask, P_r)
             
@@ -158,7 +158,7 @@ def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg,
             img_names.append((images[i], images[i+1]))
             seg_result = inference_segmentor(segment_model, imfile)[0]
             remasking = remask(seg_result,12) # 12 is the idx of person
-            new_mask = BFS(remasking)
+            new_mask = BFS_mask(remasking)
             problem = single_projection_problem(K, new_mask, P_r, V_r, imfile.split('/')[-1])
             problem_sets.append(problem)
         
