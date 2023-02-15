@@ -1,5 +1,6 @@
 import numpy as np
-
+import math
+import sys
 
 class Queue:
     "A container with a first-in-first-out (FIFO) queuing policy."
@@ -21,17 +22,22 @@ class Queue:
         "Returns true if the queue is empty"
         return len(self.list) == 0
 
-def bilinear_interpolate(im, x, y):
+def bilinear_interpolate(im, x, y, p0=None, p1=None):
     """
-    compute the bilinear interpolation
+    compute the bilinear interpolation.
+    y is v, x is u
     """
     x = np.asarray(x)
     y = np.asarray(y)
 
-    x0 = np.floor(x).astype(int)
-    x1 = x0 + 1
-    y0 = np.floor(y).astype(int)
-    y1 = y0 + 1
+    if p0 is None:
+        x0 = np.floor(x).astype(int)
+        x1 = x0 + 1
+        y0 = np.floor(y).astype(int)
+        y1 = y0 + 1
+    else:
+        x0,y0 = p0
+        x1,y1 = p1
 
     x0 = np.clip(x0, 0, im.shape[1]-1)
     x1 = np.clip(x1, 0, im.shape[1]-1)
@@ -48,7 +54,7 @@ def bilinear_interpolate(im, x, y):
     wc = (x-x0) * (y1-y)
     wd = (x-x0) * (y-y0)
 
-    return wa*Ia + wb*Ib + wc*Ic + wd*Id
+    return (wa*Ia + wb*Ib + wc*Ic + wd*Id)/((x1-x0)*(y1-y0))
 
 def complete_depth_map(map):
     """
@@ -179,37 +185,54 @@ class Masking_problem():
         u,v = p
         p_set = []
         if v + 1 < self.height:
-            if self.mask[v+1][u] == self.constraint:
+            if self.constraint(self.mask[v+1][u]):
                 p_set.append((u,v+1))
         if v - 1 > 0:
-            if self.mask[v-1][u] == self.constraint:
+            if self.constraint(self.mask[v-1][u]):
                 p_set.append((u,v-1))
         if u + 1 < self.width:
-            if self.mask[v][u+1] == self.constraint:
+            if self.constraint(self.mask[v][u+1]):
                 p_set.append((u+1,v))
         if u - 1 > 0:
-            if self.mask[v][u-1] == self.constraint:
+            if self.constraint(self.mask[v][u-1]):
                 p_set.append((u-1,v))
         return p_set
+    def get_contours(self, p):
+        u,v = p
+        p_set = set({})
+        if v + 1 < self.height:
+            if not self.constraint(self.mask[v+1][u]):
+                p_set.add((u,v+1))
+        if v - 1 > 0:
+            if not self.constraint(self.mask[v-1][u]):
+                p_set.add((u,v-1))
+        if u + 1 < self.width:
+            if not self.constraint(self.mask[v][u+1]):
+                p_set.add((u+1,v))
+        if u - 1 > 0:
+            if not self.constraint(self.mask[v][u-1]):
+                p_set.add((u-1,v))
+        return p_set
 
-def BFS(mask, constraint, problem):
+def BFS(mask, constraint, problem, need_contour = False):
     """
     This function will search in the mask to find the largest area with mask == 1
     return: new_mask in the same shape of mask    
     """
-
-    v_idx, u_idx = np.where(mask==constraint)
+    v_idx, u_idx = np.where(constraint(mask))
     #print(x_idx)
     mask_set = set([])
     for i in range(len(v_idx)):
         mask_set.add((u_idx[i],v_idx[i]))
     groups = []
+    contours = []
 
     while(len(mask_set) > 0):
         state_stack = Queue()
         StartState = mask_set.pop()
         state_stack.push(StartState)
         Visit = set([])
+        contour = set([])
         while True:
             if state_stack.isEmpty():
                 break
@@ -217,23 +240,32 @@ def BFS(mask, constraint, problem):
             if state not in Visit:
                 Visit.add(state)
                 successors = problem.get_surroundings(state)
+                c = problem.get_contours(state)
+                #print(c)
+                contour = set.union(contour, c)
                 if successors is not None:
                     for successor in successors:
                         state_stack.push(successor)
                         mask_set.discard(successor)
         groups.append(Visit)
-    
-    return groups
+        contours.append(contour)
+    if not need_contour:
+        return groups
+    else:
+        return groups, contours
+
+def equal1(a):
+    return a==1
 
 def BFS_mask(mask):
     """
-    masking problem with BFS
+    finding contours using bfs
     """
     new_mask = np.zeros_like(mask)
-    problem = Masking_problem(mask,1)
+    problem = Masking_problem(mask,equal1)
     count = 0
     max_group =None
-    groups = BFS(mask, 1, problem)
+    groups = BFS(mask, equal1, problem)
     for visit in groups:
         if len(visit)>count:
             count = len(visit)
@@ -243,8 +275,31 @@ def BFS_mask(mask):
 
     return new_mask
 
+def find_closest_pos(p, contour):
+    dist = 1e9
+    for c in contour:
+        if (p[0]-c[0])**2+(p[1]-c[1])**2 < dist:
+            m = c
+            dist = (p[0]-c[0])**2+(p[1]-c[1])**2
+    return m
+
 def BFS_nan(depth_map):
     """
     depth complement problem with bfs
     """
-    problem = Masking_problem(depth_map, np.nan)
+    # h,w = depth_map.shape
+    # for i in range(h):
+    #     for j in range(w):
+    #         if math.isnan(depth_map[i][j]):
+    #             depth_map[i][j] = None
+    problem = Masking_problem(depth_map, np.isnan)
+    
+    groups,contours = BFS(depth_map,np.isnan, problem, True)
+    for i in range(len(groups)):
+        # p[0] is u, p[1] is v
+        visit = groups[i]
+        contour = contours[i]
+        for p in visit:
+            pc = find_closest_pos(p,contour)
+            depth_map[p[1]][p[0]] = depth_map[pc[1]][pc[0]]
+    return depth_map

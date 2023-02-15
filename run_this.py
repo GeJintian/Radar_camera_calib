@@ -20,17 +20,15 @@ from fine_opt import optical_field, fine_optimize
 
 DEVICE = 'cuda'
 
-def interpolate_helper(d_image, segmentation, u, v):
-    h,w = d_image.shape
-    return
-
-def depth_interpolate(d_image, segmentation):
-    h,w = d_image.shape
-    interpolate_helper(d_image,0,0)
-    return d_image
 
 def load_depth(dfile):
     d_image = np.load(dfile)
+    d_image = BFS_nan(d_image)
+    h,w = d_image.shape
+    for i in range(h):
+        for j in range(w):
+            if math.isnan(d_image[i][j]):
+                print("encounter nan")
     return d_image
 
 def load_RGB(imfile):
@@ -185,6 +183,7 @@ def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg,
         fields = []
         P_rs = []
         V_rs = []
+        print("Prepare for fine opt")
         for idx in range(len(img_names)):
             imgs = img_names[idx]
             if imgs is not None:
@@ -206,6 +205,7 @@ def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg,
                     P_rs.append(pr)
                     V_rs.append(V_r[p]*pr/np.linalg.norm(pr))
                     fields.append(field)
+        print("Begin fine optimization")
         M_t_init = fine_optimize(M_t_init, P_rs, V_rs, fields)
         print(M_t_init)
 
