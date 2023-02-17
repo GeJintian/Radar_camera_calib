@@ -122,7 +122,7 @@ def Ji(cVc, T, Vr):
     cVr = T@Vr
     alpha = cVc.T@cVr # should be scalar
     beta = cVr.T@cVr # should be scalar
-    return (alpha-beta)*cVr
+    return (alpha/beta-1)*cVr
 
 def J(cVcs, T, Vrs):
     """return: the final cost function J = sum(Ji^T*Ji)"""
@@ -163,15 +163,20 @@ def dalpha(T, Vr, Pr, field:optical_field):
     return result
 
 def dbeta(T,Vr):
-    """Derivative of beta"""
-    cVrT = np.dot(T,Vr).T
+    """Derivative of beta"""#TODO: Modify this
+    cVr = np.dot(T,Vr)
     dliealg = dLieAlg(T, Vr)
-    result = 2*cVrT@dliealg
+    result = -2*cVr.T/((cVr.T@cVr)**2)@dliealg
     return result
 
-def dgamma(T, Vr, Pr, field):
+def dgamma(T, Vr, Pr, field:optical_field):
     """Derivative of alpha-beta"""
-    result = dalpha(T,Vr, Pr, field) - dbeta(T,Vr)
+    cPc = T@Pr
+    cVr = T@Vr
+    cVc = field.get_velocity(cPc)
+    alpha = cVc.T@cVr # should be scalar
+    beta = cVr.T@cVr # should be scalar
+    result = dalpha(T,Vr, Pr, field)*beta - alpha*dbeta(T,Vr)
     return result
 
 # def dcVc(T, Pr, field:optical_field):
