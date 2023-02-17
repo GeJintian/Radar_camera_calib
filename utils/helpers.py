@@ -54,7 +54,7 @@ def bilinear_interpolate(im, x, y, p0=None, p1=None):
     wc = (x-x0) * (y1-y)
     wd = (x-x0) * (y-y0)
 
-    return (wa*Ia + wb*Ib + wc*Ic + wd*Id)/((x1-x0)*(y1-y0))
+    return (wa*Ia + wb*Ib + wc*Ic + wd*Id)#/((x1-x0)*(y1-y0))
 
 def complete_depth_map(map):
     """

@@ -3,6 +3,7 @@ import scipy
 import cv2
 from utils.helpers import Cam2World, World2Cam, Doppler_velocity, Pos2Vel, Pos_transform, build_matrix, bilinear_interpolate
 import sys
+import scipy.optimize as opt
 
 
 class optical_field():
@@ -199,6 +200,7 @@ def objective_func(x, position, fields, Vrs):
     here, if there are n points in one image, fun returns [3nx1].
     x: [6x1] Lie Alg
     """
+    x = np.array([x]).transpose()
     T = Alg2Group(x)
     cVcs = []
     for p in range(len(position)):
@@ -208,7 +210,8 @@ def objective_func(x, position, fields, Vrs):
     for i in range(1,len(cVcs)):
         ji = Ji(cVcs[i], T, Vrs[i])
         result = np.vstack((result,ji))
-    return result
+
+    return result.transpose()[0]
 
 def derivative(x, position, fields, Vrs):
     """
@@ -217,6 +220,7 @@ def derivative(x, position, fields, Vrs):
     field: optical field for that x
     return: [6]
     """
+    x = np.array([x]).transpose()
     T = Alg2Group(x)
     result = dJi(position[0],T,Vrs[0],fields[0])
     for i in range(1,len(fields)):
@@ -235,17 +239,23 @@ def gn(f, jac, x0, fields, Vrs, position, max_iter=1000, tol=1e-6):
         Jx = jac(x, position, fields, Vrs)
         dx = np.linalg.solve(Jx.T @ Jx, -Jx.T @ fx)
         x += dx
+        #print(dx)
         if np.linalg.norm(dx) < tol:
             break
     return x
 
-def least_squares(f, x0, jac, fields, Vrs, position, method = 'lm'):
+def least_squares(f, jac, x0, fields, Vrs, position, method = 'lm'):
     """
     Levenberg-Marquardt, dogleg and trf for optimization. Use scipy implementation.
     method could be {'trf','lm','dogbox'}
     """
     kwargs = {"position":position, "fields": fields, "Vrs":Vrs}
-    x = scipy.optimize.least_squares(f, x0, jac, method = method, kwargs = kwargs)
+    print(callable(f))
+    print(callable(jac))    
+    x0 = x0.transpose()[0]
+    print(x0)
+    
+    x = opt.least_squares(fun = f, jac=jac, x0=x0, method = method, kwargs = kwargs)
     return x
 
 def steepest_descent():
@@ -256,5 +266,9 @@ def fine_optimize(M_init, Prs, Vrs, fields):
     """fine opt is implemented in a gradient descent/steepest ascent manner"""
     M_init = build_matrix(M_init)
     x0 = Group2Alg(M_init)
-    x = gn(objective_func, derivative, x0, fields, Vrs, Prs)
-    return Alg2Group(x)
+
+    res_log = least_squares(objective_func, derivative, x0, fields, Vrs, Prs)
+    x=res_log.x
+    print(res_log)
+    #x = np.array([x]).transpose()
+    #return Alg2Group(x)

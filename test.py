@@ -60,12 +60,11 @@ if __name__=="__main__":
     # show_ing = show_img.astype(np.int)
     # cv2.imshow("1",show_img)
     # cv2.waitKey(0)
-    images = glob.glob(os.path.join(path, '*.npy')) + \
-                 glob.glob(os.path.join(path, '*.npy'))
+    images = glob.glob(os.path.join(path, '*.npy'))
     images = sorted(images)
     for img in images:
-        print("begin processing")
+        print("begin processing", img)
         d_image = np.load(img)
         d_image = BFS_nan(d_image)
-        np.save("result/complete_depth/"+dfile,d_image)
+        np.save("result/complete_depth/"+img.split('/')[-1],d_image)
 

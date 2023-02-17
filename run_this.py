@@ -23,12 +23,12 @@ DEVICE = 'cuda'
 
 def load_depth(dfile):
     d_image = np.load(dfile)
-    d_image = BFS_nan(d_image)
-    h,w = d_image.shape
-    for i in range(h):
-        for j in range(w):
-            if math.isnan(d_image[i][j]):
-                print("encounter nan")
+    # d_image = BFS_nan(d_image)
+    # h,w = d_image.shape
+    # for i in range(h):
+    #     for j in range(w):
+    #         if math.isnan(d_image[i][j]):
+    #             print("encounter nan")
     return d_image
 
 def load_RGB(imfile):
@@ -217,7 +217,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     point_path = 'result/radar'
     camera_calib_file = 'result/calibration.npy'
-    depth_path = 'result/depth'
+    depth_path = 'result/complete_depth'
 
     image_path = 'result/img'
     segment_cfg = '/home/gejintian/workspace/mmlab/mmsegmentation/configs/segformer/segformer_mit-b2_512x512_160k_ade20k.py'
