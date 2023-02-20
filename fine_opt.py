@@ -4,6 +4,8 @@ import cv2
 from utils.helpers import Cam2World, World2Cam, Doppler_velocity, Pos2Vel, Pos_transform, build_matrix, bilinear_interpolate
 import sys
 import scipy.optimize as opt
+from utils.SA import SimulatedAnnealingBase
+from utils.plot import disturbance_trans, disturbance_rot
 
 
 class optical_field():
@@ -179,25 +181,17 @@ def dgamma(T, Vr, Pr, field:optical_field):
     result = dalpha(T,Vr, Pr, field)*beta - alpha*dbeta(T,Vr)
     return result
 
-# def dcVc(T, Pr, field:optical_field):
-#     """Derivative of cVc. dcVc = dopt*dLieAlg(T,Pr) """
-#     Dpr = dLieAlg(T, Pr)
-#     result = dopt()*Dpr
-#     return result
-
-
-# def dopt(cPc,field:optical_field):
-#     """
-#     Derivative of optical flow velocity. Using central difference.
-#     Instead of directly compute the FDM of dv/dp, it is better to transfer 3D position into a 2D camera coordinate, and then apply 2D FDM
-#     """
-#     #TODO: compute a 2-dimension central difference + chain rule
-#     result = np.dot(field.central_difference(),dP_cam())
-#     return result
-
-# def dP_cam():
-#     #TODO: compute the derivative of P_cam against P_world
-#     return
+class analytic_problem():
+    def __init__(self,position, fields, Vrs) -> None:
+        self.position = position
+        self.fields = fields
+        self.Vrs = Vrs
+    def objective_function(self,x):
+        x= build_matrix(x)
+        x = Group2Alg(x)
+        x = x.transpose()[0]
+        ji = objective_func(x, self.position, self.fields, self.Vrs)
+        return 0.5*(ji.T@ji)
 
 def objective_func(x, position, fields, Vrs):
     """
@@ -260,7 +254,7 @@ def least_squares(f, jac, x0, fields, Vrs, position, method = 'lm'):
     x0 = x0.transpose()[0]
     print(x0)
     
-    x = opt.least_squares(fun = f, jac=jac, x0=x0, method = method, kwargs = kwargs)
+    x = opt.least_squares(fun = f, jac=jac, x0=x0, method = method, xtol = None, kwargs = kwargs, loss = 'soft_l1')
     return x
 
 def steepest_descent():
@@ -272,8 +266,30 @@ def fine_optimize(M_init, Prs, Vrs, fields):
     M_init = build_matrix(M_init)
     x0 = Group2Alg(M_init)
 
-    res_log = least_squares(objective_func, derivative, x0, fields, Vrs, Prs)
+    res_log = least_squares(objective_func, derivative, x0, fields, Vrs, Prs, method = 'dogbox')
     x=res_log.x
+    disturbance_trans(x, objective_func, Prs, Vrs, fields,0)
+    disturbance_trans(x, objective_func, Prs, Vrs, fields,1)
+    disturbance_trans(x, objective_func, Prs, Vrs, fields,2)
+    disturbance_trans(x, objective_func, Prs, Vrs, fields,3)
+    disturbance_trans(x, objective_func, Prs, Vrs, fields,4)
+    disturbance_trans(x, objective_func, Prs, Vrs, fields,5)
     print(res_log)
-    #x = np.array([x]).transpose()
-    #return Alg2Group(x)
+    np.save('opt_LieAlg.npy',x)
+    x = np.array([x]).transpose()
+    return Alg2Group(x)
+
+def fine_sa(M_t_init, Prs, Vrs, fields):
+    T_max = 50 # max temperature
+    T_min = 1e-7 # min temperature
+    k = 100 # number of success
+
+    problem = analytic_problem(Prs, fields, Vrs)
+    print('In the beginning, score is',problem.objective_function(M_t_init))
+    sa = SimulatedAnnealingBase(problem, M_t_init, T_max, T_min, k)
+    best_M_t, best_score = sa.run()
+    x,y,z,w = best_M_t[:4]
+    mag = np.sqrt(x*x+y*y+z*z+w*w)
+    best_M_t[:4] = [x,y,z,w]/mag
+    print("Best score is"+str(best_score))
+    return best_M_t

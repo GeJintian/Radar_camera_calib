@@ -90,7 +90,7 @@ def coarse_optimize(M_t_init, problem,imfile=None):
     T_min = 1e-7 # min temperature
     k = 100 # number of success
 
-    sa = SimulatedAnnealingBase(problem, M_t_init, T_max, T_min, k)
+    sa = SimulatedAnnealingBase(problem, M_t_init, T_max, T_min, k, stop_value=-100*problem.get_all_pts_number())
     best_M_t, best_score = sa.run()
 
     if imfile is not None:

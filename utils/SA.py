@@ -28,7 +28,7 @@ class SimulatedAnnealingBase():
         assert T_max > T_min > 0, 'T_max > T_min > 0'
 
         self.problem = problem
-        self.stop_value = -100*self.problem.get_all_pts_number()
+        self.stop_value = stop_value
         self.T_max = T_max  # initial temperature
         self.T_min = T_min  # end temperature
         self.L = int(L)  # num of iteration under every temperature（also called Long of Chain）
@@ -39,7 +39,7 @@ class SimulatedAnnealingBase():
 
         self.best_x = np.array(x0)  # initial solution
         self.best_y = self.problem.objective_function(self.best_x)
-        print("There are "+str(self.problem.get_all_pts_number())+" points in this frame.")
+        #print("There are "+str(self.problem.get_all_pts_number())+" points in this frame.")
         #print("In the beginning, best score is ",self.best_y)
         self.T = self.T_max
         self.iter_cycle = 0
