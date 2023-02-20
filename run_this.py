@@ -15,7 +15,7 @@ from utils.raft_core.utils import InputPadder
 from utils.helpers import *
 from utils.visualize import seg_mask, viz_optical, viz_mask, print_minmax, viz_pts
 from coarse_opt import coarse_optimize, single_projection_problem, batch_projection_problem
-from fine_opt import optical_field, fine_optimize
+from fine_opt import optical_field, fine_optimize, fine_sa, Alg2Group
 
 
 DEVICE = 'cuda'
@@ -168,6 +168,7 @@ def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg,
         mag = np.sqrt(x*x+y*y+z*z+w*w)
         M_t_init[:4] = [x,y,z,w]/mag
         print("Finish coarse optimize")
+        print("After coarse opt, quaternions are",M_t_init)
 
         # fine optimize
         idx = problems.update(M_t_init)
@@ -207,7 +208,14 @@ def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg,
                     fields.append(field)
         print("Begin fine optimization")
         M_t_init = fine_optimize(M_t_init, P_rs, V_rs, fields)
+        #M_t_init = fine_sa(M_t_init, P_rs, V_rs, fields)
         print(M_t_init)
+        rot = M_t_init[:3][:3]
+        qw = np.sqrt(1+rot[0][0]+rot[1][1]+rot[2][2])/2
+        qx = (rot[2][1]-rot[1][2])/(4*qw)
+        qy = (rot[0][2]-rot[2][0])/(4*qw)
+        qz = (rot[1][0]-rot[0][1])/(4*qw)
+        print('quaternions are ', [qx,qy,qz,qw])
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -220,11 +228,12 @@ if __name__ == '__main__':
     depth_path = 'result/complete_depth'
 
     image_path = 'result/img'
-    segment_cfg = '/home/gejintian/workspace/mmlab/mmsegmentation/configs/segformer/segformer_mit-b2_512x512_160k_ade20k.py'
+    #segment_cfg = '/home/gejintian/workspace/mmlab/mmsegmentation/configs/segformer/segformer_mit-b2_512x512_160k_ade20k.py'
+    segment_cfg = '/mnt/e/NTU/mmlab/mmsegmentation//configs/segformer/segformer_mit-b2_512x512_160k_ade20k.py'
     segment_ckpts = 'models/b2.pth'
     raft_ckpts = 'models/raft-things.pth'
     #M_t_init = [0,0,0,0,-3/100,-5.9/100,8.75/100]
-    M_t_init = [0,0,0,1,-0/100,-0/100,0/100]
+    M_t_init = [0,0.2,0.1,0.5,-0/100,-0/100,0/100]
     alignment = 'result/alignment.json'
 
     #single_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment)
