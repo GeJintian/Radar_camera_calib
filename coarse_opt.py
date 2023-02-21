@@ -2,6 +2,8 @@ import numpy as np
 
 from utils.helpers import Pos_transform, World2Cam, build_matrix, is_close
 from utils.SA import SimulatedAnnealingBase
+from fine_opt import Alg2Group, Group2Alg
+
 
 class single_projection_problem():
     """This is the class of projection problem. We want to make sure all projected points are within the mask"""
@@ -58,10 +60,12 @@ class single_projection_problem():
         return len(self.P_r)
     
 class batch_projection_problem():
-    def __init__(self,problems) -> None:
+    def __init__(self,problems,trans) -> None:
         self.problems = problems
+        self.trans = trans
 
-    def objective_function(self,t):
+    def objective_function(self,r):
+        t = np.hstack((r,self.trans))
         result = 0
         for p in self.problems:
             result += p.objective_function(t)
@@ -71,7 +75,8 @@ class batch_projection_problem():
         for p in self.problems:
             result += p.get_all_pts_number()
         return result
-    def update(self,t):
+    def update(self,r):
+        t = np.hstack((r,self.trans))
         idx = []
         for i in range(len(self.problems)):
             p = self.problems[i]

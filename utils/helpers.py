@@ -303,3 +303,19 @@ def BFS_nan(depth_map):
             pc = find_closest_pos(p,contour)
             depth_map[p[1]][p[0]] = depth_map[pc[1]][pc[0]]
     return depth_map
+
+def quaternions2euler(x,y,z,w):
+
+    sinr_cosp = 2 * (w * x + y * z)
+    cosr_cosp = 1 - 2 * (x * x + y * y)
+    roll = math.atan2(sinr_cosp, cosr_cosp)
+
+    sinp = math.sqrt(1 + 2 * (w * y - x * z))
+    cosp = math.sqrt(1 - 2 * (w * y - x * z))
+    pitch = 2 * math.atan2(sinp, cosp) - math.pi / 2
+
+    siny_cosp = 2 * (w * z + x * y)
+    cosy_cosp = 1 - 2 * (y * y + z * z)
+    yaw = math.atan2(siny_cosp, cosy_cosp)
+
+    return roll, pitch, yaw

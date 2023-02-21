@@ -76,16 +76,13 @@ def anti_sym_mat(phi):
     anti_sym_mat = np.array([[0,-p3[0],p2[0]],[p3[0],0,-p1[0]],[-p2[0],p1[0],0]])
     return anti_sym_mat
 
-def Group2Alg(T):
+def Group2Alg(R):
     """
     Compute Lie Group SE(3) to Lie Algebra se(3)
 
-    T: [4x4] transformation matrix
-    return: [6x1] Lie algebra of T
+    T: [3x3] transformation matrix
+    return: [3x1] Lie algebra of T
     """
-    R = T[:3,:3]
-    t = T[:3,3]
-    t = np.array([t]).T
     theta = np.arccos((np.trace(R)-1)/2)
     eigval,eigvec = scipy.linalg.eig(R,right = True)
     for i in range(len(eigval)):
@@ -95,27 +92,19 @@ def Group2Alg(T):
     a = np.array([a]).T # transform to nx1
     phi = theta*a
 
-    J = np.sin(theta)/theta*np.eye(3) + (1-np.sin(theta)/theta)*a@a.T + (1-np.cos(theta))/theta*anti_sym_mat(a)
-    rho = np.linalg.solve(J,t.T[0])
-    rho = np.array([rho]).T
-    return np.vstack((rho,phi))
+    return phi
 
-def Alg2Group(xi):
+def Alg2Group(phi):
     """
     Compute Lie Algebra se(3) to Lie Group SE(3)
 
-    xi: [6x1] Lie alg in se(3)
-    return: [4x4] Lie group of xi in SE(3)
+    xi: [3x1] Lie alg in se(3)
+    return: [3x3] Lie group of xi in SE(3)
     """
-    phi = xi[3:]
-    rho = xi[:3]
     theta = np.linalg.norm(phi)
     a = phi/theta
-    J = np.sin(theta)/theta*np.eye(3) + (1-np.sin(theta)/theta)*a@a.T + (1-np.cos(theta))/theta*anti_sym_mat(a)
     R = np.cos(theta)*np.eye(3) + (1-np.cos(theta))*a@a.T + np.sin(theta)*anti_sym_mat(a)
-    result = np.hstack((R,J@rho))
-    result = np.vstack((result,np.array([0,0,0,1])))
-    return result
+    return R
 
 def Ji(cVc, T, Vr):
     """
@@ -148,12 +137,9 @@ def dLieAlg(T,P):
     """The input P could be a position or a velocity"""
     p = P[:3] # inhomogeneous format
     R = T[:3,:3]
-    t = T[:3,3]
-    t = np.array([t]).T
-    Liealg = R@p + t
+    Liealg = R@p
     asm = -anti_sym_mat(Liealg)
-    result = np.hstack((np.diag([1,1,1]),asm))
-    result = np.vstack((result,np.zeros(6)))
+    result = np.vstack((asm,np.zeros(3)))
     return result
 
 def dalpha(T, Vr, Pr, field:optical_field):
@@ -193,14 +179,18 @@ class analytic_problem():
         ji = objective_func(x, self.position, self.fields, self.Vrs)
         return 0.5*(ji.T@ji)
 
-def objective_func(x, position, fields, Vrs):
+def objective_func(x, position, fields, Vrs,trans):
     """
     compute fun for optimization algorithms
     here, if there are n points in one image, fun returns [3nx1].
     x: [6x1] Lie Alg
     """
+
     x = np.array([x]).transpose()
-    T = Alg2Group(x)
+    trans = np.array([trans]).transpose()
+    rotate = Alg2Group(x)
+    T = np.hstack((rotate,trans))
+    T = np.vstack((T,np.array([0,0,0,1])))
     cVcs = []
     for p in range(len(position)):
         v = fields[p].get_velocity(T@position[p])
@@ -212,7 +202,7 @@ def objective_func(x, position, fields, Vrs):
 
     return result.transpose()[0]
 
-def derivative(x, position, fields, Vrs):
+def derivative(x, position, fields, Vrs,trans):
     """
     compute the derivative for optimization algorithms
     x: optimization variaty, which is [6x1] Lie alg
@@ -220,7 +210,10 @@ def derivative(x, position, fields, Vrs):
     return: [6]
     """
     x = np.array([x]).transpose()
-    T = Alg2Group(x)
+    trans = np.array([trans]).transpose()
+    rotate = Alg2Group(x)
+    T = np.hstack((rotate,trans))
+    T = np.vstack((T,np.array([0,0,0,1])))
     result = dJi(position[0],T,Vrs[0],fields[0])
     for i in range(1,len(fields)):
         dj = dJi(position[i],T,Vrs[i],fields[i])
@@ -248,32 +241,30 @@ def least_squares(f, jac, x0, fields, Vrs, position, method = 'lm'):
     Levenberg-Marquardt, dogleg and trf for optimization. Use scipy implementation.
     method could be {'trf','lm','dogbox'}
     """
-    kwargs = {"position":position, "fields": fields, "Vrs":Vrs}
-    print(callable(f))
-    print(callable(jac))    
-    x0 = x0.transpose()[0]
-    print(x0)
+    x0 = build_matrix(x0)
     
-    x = opt.least_squares(fun = f, jac=jac, x0=x0, method = method, xtol = None, kwargs = kwargs, loss = 'soft_l1')
+    rotate = x0[:3,:3]
+    trans = x0[:3,3]
+    kwargs = {"position":position, "fields": fields, "Vrs":Vrs, "trans":trans}
+ 
+    x = Group2Alg(rotate)
+    x = x.T[0]
+    x = opt.least_squares(fun = f, jac=jac, x0=x, method = method, xtol = None, kwargs = kwargs, loss = 'soft_l1')
     return x
 
 def steepest_descent():
     #TODO: Implement it if still have time
     return
 
-def fine_optimize(M_init, Prs, Vrs, fields):
+def fine_optimize(M_init, Prs, Vrs, fields, trans):
     """fine opt is implemented in a gradient descent/steepest ascent manner"""
-    M_init = build_matrix(M_init)
-    x0 = Group2Alg(M_init)
+    x = np.hstack((M_init,trans))
 
-    res_log = least_squares(objective_func, derivative, x0, fields, Vrs, Prs, method = 'dogbox')
+    res_log = least_squares(objective_func, derivative, x, fields, Vrs, Prs, method = 'dogbox')
     x=res_log.x
-    disturbance_trans(x, objective_func, Prs, Vrs, fields,0)
-    disturbance_trans(x, objective_func, Prs, Vrs, fields,1)
-    disturbance_trans(x, objective_func, Prs, Vrs, fields,2)
-    disturbance_trans(x, objective_func, Prs, Vrs, fields,3)
-    disturbance_trans(x, objective_func, Prs, Vrs, fields,4)
-    disturbance_trans(x, objective_func, Prs, Vrs, fields,5)
+    disturbance_trans(x, objective_func, Prs, Vrs, fields,trans,0)
+    disturbance_trans(x, objective_func, Prs, Vrs, fields,trans,1)
+    disturbance_trans(x, objective_func, Prs, Vrs, fields,trans,2)
     print(res_log)
     np.save('opt_LieAlg.npy',x)
     x = np.array([x]).transpose()

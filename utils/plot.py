@@ -4,7 +4,7 @@ import math
 
 
 
-def disturbance_trans(M_t_init, obj, Prs, Vrs, fields,idx = 0):
+def disturbance_trans(M_t_init, obj, Prs, Vrs, fields,trans,idx = 0):
     plt.clf()
     x = []
     y=[]
@@ -12,7 +12,7 @@ def disturbance_trans(M_t_init, obj, Prs, Vrs, fields,idx = 0):
         temp = np.copy(M_t_init)
         temp[idx] += (i-1000)/10000
         x.append((i-1000)/10000)
-        val = obj(temp, Prs, fields, Vrs)
+        val = obj(temp, Prs, fields, Vrs,trans)
         y.append(0.5*np.sqrt(val.T@val))
     
     x=np.array(x)

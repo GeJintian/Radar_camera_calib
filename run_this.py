@@ -144,6 +144,7 @@ def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg,
         img_names = [] # store (im0,im1) for depth and raft
 
         # coarse optimize
+        print('Begin Coarse opt')
         for i in range(len(images)-1):
             imfile = images[i]
             
@@ -160,7 +161,9 @@ def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg,
             problem = single_projection_problem(K, new_mask, P_r, V_r, imfile.split('/')[-1])
             problem_sets.append(problem)
         
-        problems = batch_projection_problem(problem_sets)
+        trans = M_t_init[4:]
+        problems = batch_projection_problem(problem_sets, trans)
+        M_t_init = M_t_init[:4]
         print("In the beginning, the score is", problems.objective_function(M_t_init))
         M_t = coarse_optimize(M_t_init, problems)
         M_t_init = M_t
@@ -207,7 +210,7 @@ def batch_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg,
                     V_rs.append(V_r[p]*pr/np.linalg.norm(pr))
                     fields.append(field)
         print("Begin fine optimization")
-        M_t_init = fine_optimize(M_t_init, P_rs, V_rs, fields)
+        M_t_init = fine_optimize(M_t_init, P_rs, V_rs, fields,trans)
         print(M_t_init)
         rot = M_t_init[:3][:3]
         qw = np.sqrt(1+rot[0][0]+rot[1][1]+rot[2][2])/2
@@ -231,7 +234,7 @@ if __name__ == '__main__':
     segment_ckpts = 'models/b2.pth'
     raft_ckpts = 'models/raft-things.pth'
     #M_t_init = [0,0,0,0,-3/100,-5.9/100,8.75/100]
-    M_t_init = [0,0.2,0.1,0.5,-0/100,-0/100,0/100]
+    M_t_init = [0,0.2,0.1,0.7,-3/100,-5.9/100,8.75/100]
     alignment = 'result/alignment.json'
 
     #single_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment)
