@@ -6,21 +6,32 @@ import sys
 import scipy.optimize as opt
 from utils.SA import SimulatedAnnealingBase
 from utils.plot import disturbance_trans, disturbance_rot
+import math
 
 
 class optical_field():
-    def __init__(self, optical_map, depth_map0, depth_map1, K, dt, dp, dq, dr) -> None:
+    def __init__(self, optical_map, depth_map0, depth_map1, mask, centroid, K, dt, dp, dq, dr) -> None:
         # dt is the time interval between each image
-        self.optical_u, self.optical_v = optical_map.numpy()
+        #self.optical_u, self.optical_v = optical_map.numpy()
+        self.optical_u = optical_map[:,:,0]
+        self.optical_v = optical_map[:,:,1]
         self.depth_map0 = depth_map0
         self.depth_map1 = depth_map1
         self.dt = dt
         self.k = K
         self.dp = [dp,dq,dr] # For x,y,z
+        self.mask = mask
+        self.count = 0
+        self.centroid = centroid
     
     def get_next_opt(self, u, v):
         du = bilinear_interpolate(self.optical_u, u, v)
         dv = bilinear_interpolate(self.optical_v, u, v)
+        # #print(du,dv)
+        # while (not self.get_remask(u+du,v+dv) ==1):
+        #     du = du+0.1*(self.centroid[0]-u-du)/abs(self.centroid[0]-u-du)
+        #     dv = dv+0.1*(self.centroid[1]-v-dv)/abs(self.centroid[1]-v-dv)
+        #     #print('In the loop')
         return (u+du, v+dv) #TODO: Check, for raft, is the first output for u-axis?
 
     def get_dep0(self, u, v):
@@ -28,6 +39,9 @@ class optical_field():
 
     def get_dep1(self, u, v):
         return bilinear_interpolate(self.depth_map1, u, v)
+    
+    # def get_remask(self,u,v):
+    #     return bilinear_interpolate(self.mask,u,v)
 
     def get_velocity_uv(self,u,v):
         # return: [4x1]
@@ -42,7 +56,11 @@ class optical_field():
     
     def get_velocity(self, P):
         u,v = World2Cam(self.k, P)
-        return self.get_velocity_uv(u[0],v[0])
+        vel = -self.get_velocity_uv(u[0],v[0])
+        if np.sqrt(abs(vel.T@vel)) > 5:
+            self.count = self.count + 1
+        #     #print('counting')
+        return vel
 
     #We might need bilinear interpolation and central difference for optical field
     def central_difference(self, P):
@@ -141,11 +159,11 @@ def dJi(Pr:np.ndarray, T:np.ndarray, Vr:np.ndarray, field:optical_field)->np.nda
     alpha = cVc.T@cVr # should be scalar
     beta = cVr.T@cVr # should be scalar
     gamma = alpha-beta
-    result = gamma * dLieAlg(T,Vr) + cVr@dgamma(T, Vr, Pr, field)
+    result = gamma * so3(T,Vr) + cVr@dgamma(T, Vr, Pr, field)
     return result
 
 def dLieAlg(T,P):
-    """The input P could be a position or a velocity"""
+    """The input P could be a position"""
     p = P[:3] # inhomogeneous format
     R = T[:3,:3]
     t = T[:3,3]
@@ -156,18 +174,28 @@ def dLieAlg(T,P):
     result = np.vstack((result,np.zeros(6)))
     return result
 
+def so3(T,P):
+    """The input P could be a velocity"""
+    p = P[:3] # inhomogeneous format
+    R = T[:3,:3]
+    Liealg = R@p
+    asm = -anti_sym_mat(Liealg)
+    result = np.hstack((np.zeros((3,3)),asm))
+    result = np.vstack((result,np.zeros(6)))
+    return result
+
 def dalpha(T, Vr, Pr, field:optical_field):
     """Derivative of alpha"""
     cPc = T@Pr
     cVr = T@Vr
     cVc = field.get_velocity(cPc)
-    result = cVr.T@(field.central_difference(cPc)@dLieAlg(T,Pr)) + cVc.T@dLieAlg(T,Vr)
+    result = cVr.T@(field.central_difference(cPc)@dLieAlg(T,Pr)) + cVc.T@so3(T,Vr)
     return result
 
 def dbeta(T,Vr):
     """Derivative of beta"""#TODO: Modify this
     cVr = np.dot(T,Vr)
-    dliealg = dLieAlg(T, Vr)
+    dliealg = so3(T, Vr)
     result = -2*cVr.T/((cVr.T@cVr)**2)@dliealg
     return result
 
@@ -248,13 +276,11 @@ def least_squares(f, jac, x0, fields, Vrs, position, method = 'lm'):
     Levenberg-Marquardt, dogleg and trf for optimization. Use scipy implementation.
     method could be {'trf','lm','dogbox'}
     """
-    kwargs = {"position":position, "fields": fields, "Vrs":Vrs}
-    print(callable(f))
-    print(callable(jac))    
+    kwargs = {"position":position, "fields": fields, "Vrs":Vrs}  
     x0 = x0.transpose()[0]
     print(x0)
     
-    x = opt.least_squares(fun = f, jac=jac, x0=x0, method = method, xtol = None, kwargs = kwargs, loss = 'soft_l1')
+    x = opt.least_squares(fun = f, jac=jac, x0=x0, method = method, kwargs = kwargs)
     return x
 
 def steepest_descent():
@@ -264,10 +290,15 @@ def steepest_descent():
 def fine_optimize(M_init, Prs, Vrs, fields):
     """fine opt is implemented in a gradient descent/steepest ascent manner"""
     M_init = build_matrix(M_init)
+    print(M_init)
     x0 = Group2Alg(M_init)
 
-    res_log = least_squares(objective_func, derivative, x0, fields, Vrs, Prs, method = 'dogbox')
+    res_log = least_squares(objective_func, derivative, x0, fields, Vrs, Prs, method = 'lm')
     x=res_log.x
+    count = 0
+    for f in fields:
+        count += f.count
+    print(count)
     disturbance_trans(x, objective_func, Prs, Vrs, fields,0)
     disturbance_trans(x, objective_func, Prs, Vrs, fields,1)
     disturbance_trans(x, objective_func, Prs, Vrs, fields,2)

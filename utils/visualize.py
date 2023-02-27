@@ -89,12 +89,13 @@ def viz_pts(mask, imfile, P_r, t, K):
 
     for i in P_r:
         p_c = Pos_transform(M_t,i)
-        u,v = World2Cam(K, p_c)
+        u,v = np.round(World2Cam(K, p_c)).astype(int)
         if v[0] < 0 or v[0] > height-1 or u[0] < 0 or u[0] > width-1:
             print("Out of index")
-        if mask[v[0]][u[0]] != 1:
-            print("Not 1")
+        # if mask[v[0]][u[0]] != 1:
+        #     print("Not 1")
         cv2.circle(img,(u[0],v[0]), point_size, point_color, thickness)
         #print(u[0],v[0])
         
-    cv2.imwrite('result/coarse/'+imfile+'.png',img)
+    #print('result/Carla/coarse/'+imfile.split('/')[-1])
+    cv2.imwrite('result/Carla/coarse/'+imfile.split('/')[-1],img)

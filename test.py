@@ -1,9 +1,17 @@
 import numpy as np
-from utils.helpers import *
 import math
 import cv2
 import glob
 import os
+import scipy
+import numpy as np
+import scipy
+import cv2
+from utils.helpers import Cam2World, World2Cam, Doppler_velocity, Pos2Vel, Pos_transform, build_matrix, bilinear_interpolate
+import sys
+import scipy.optimize as opt
+from utils.SA import SimulatedAnnealingBase
+from utils.plot import disturbance_trans, disturbance_rot
 
 # pt_file = 'result/radar/1672812488_633140000.npy'
 # pts = np.load(pt_file)
@@ -36,11 +44,41 @@ def load_camera_calib(cfg):
     k = config.reshape((3,3))
     return k
 
+def anti_sym_mat(phi):
+    """
+    compute anti-symmetric matrix of the input vector. Vector should be [3x1]
+    """
+    p1,p2,p3 = phi
+    anti_sym_mat = np.array([[0,-p3[0],p2[0]],[p3[0],0,-p1[0]],[-p2[0],p1[0],0]])
+    return anti_sym_mat
+
+def Group2Alg(T):
+    """
+    Compute Lie Group SE(3) to Lie Algebra se(3)
+
+    T: [4x4] transformation matrix
+    return: [6x1] Lie algebra of T
+    """
+    R = T[:3,:3]
+    t = T[:3,3]
+    t = np.array([t]).T
+    theta = np.arccos((np.trace(R)-1)/2)
+    eigval,eigvec = scipy.linalg.eig(R,right = True)
+    for i in range(len(eigval)):
+        if abs(eigval[i] - 1) < 1e-9:
+            break
+    a = np.real(eigvec[i]) #should be 1-dim
+    a = np.array([a]).T # transform to nx1
+    print(theta)
+    phi = theta*a
+
+    J = np.sin(theta)/theta*np.eye(3) + (1-np.sin(theta)/theta)*a@a.T + (1-np.cos(theta))/theta*anti_sym_mat(a)
+    rho = np.linalg.solve(J,t.T[0])
+    rho = np.array([rho]).T
+    return np.vstack((rho,phi))
+
 if __name__=="__main__":
-    dfile = "1672812488_540169694.npy"
-    d_image = np.load('result/depth/'+dfile)
-    show_img = np.zeros_like(d_image)
-    path = 'result/depth/'
+
     # maximum = 0
     # minimum = 1e9
     # h,w = d_image.shape
@@ -60,11 +98,21 @@ if __name__=="__main__":
     # show_ing = show_img.astype(np.int)
     # cv2.imshow("1",show_img)
     # cv2.waitKey(0)
-    images = glob.glob(os.path.join(path, '*.npy'))
-    images = sorted(images)
-    for img in images:
-        print("begin processing", img)
-        d_image = np.load(img)
-        d_image = BFS_nan(d_image)
-        np.save("result/complete_depth/"+img.split('/')[-1],d_image)
+
+    m = np.array([0,0,0,1,0.1,0.1,-0.1])
+    m = build_matrix(m)
+    x = Group2Alg(m)
+
+
+
+
+
+
+    # images = glob.glob(os.path.join(path, '*.npy'))
+    # images = sorted(images)
+    # for img in images:
+    #     print("begin processing", img)
+    #     d_image = np.load(img)
+    #     d_image = BFS_nan(d_image)
+    #     np.save("result/complete_depth/"+img.split('/')[-1],d_image)
 

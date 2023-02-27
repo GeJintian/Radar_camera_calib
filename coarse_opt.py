@@ -5,7 +5,7 @@ from utils.SA import SimulatedAnnealingBase
 
 class single_projection_problem():
     """This is the class of projection problem. We want to make sure all projected points are within the mask"""
-    def __init__(self, K, mask, P_r, V_r, imfile) -> None:
+    def __init__(self, K, mask,depth_map, P_r, V_r, imfile) -> None:
         self.mask = mask
         self.K = K
         self.P_r = P_r
@@ -17,13 +17,22 @@ class single_projection_problem():
         count = 0
         u_sum = 0
         v_sum = 0
+        depth_max = 0
+        depth_min = 1e9
         for i in range(self.h):
             for j in range(self.w):
                 if self.mask[i][j] == 1:
                     v_sum += i
                     u_sum += j
                     count += 1
+                    dep = depth_map[i][j]
+                    if dep > depth_max:
+                        depth_max = dep
+                    if dep < depth_min:
+                        depth_min = dep
         self.centroid = (u_sum/count, v_sum/count)
+        self.d_max = depth_max+0.5
+        self.d_min = depth_min -0.5
 
     def get_number_of_points(self, T):
         """
@@ -41,7 +50,7 @@ class single_projection_problem():
             if v[0] < 0 or v[0] > self.h-1 or u[0] < 0 or u[0] > self.w-1:
                 sum_val += np.sqrt(((u[0]-self.centroid[0])/self.w)**2 + ((v[0]-self.centroid[1])/self.h)**2)
                 continue
-            if self.mask[v[0]][u[0]] == 1:
+            if self.mask[v[0]][u[0]] == 1 and i[0][0]<self.d_max and i[0][0]>self.d_min:
                 count = count+1
             else:
                 sum_val += np.sqrt(((u[0]-self.centroid[0])/self.w)**2 + ((v[0]-self.centroid[1])/self.h)**2)
@@ -90,6 +99,7 @@ def coarse_optimize(M_t_init, problem,imfile=None):
     T_min = 1e-7 # min temperature
     k = 100 # number of success
 
+    print(problem.get_all_pts_number())
     sa = SimulatedAnnealingBase(problem, M_t_init, T_max, T_min, k, stop_value=-100*problem.get_all_pts_number())
     best_M_t, best_score = sa.run()
 

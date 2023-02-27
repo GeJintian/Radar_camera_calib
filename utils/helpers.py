@@ -56,10 +56,6 @@ def bilinear_interpolate(im, x, y, p0=None, p1=None):
 
     return (wa*Ia + wb*Ib + wc*Ic + wd*Id)#/((x1-x0)*(y1-y0))
 
-def complete_depth_map(map):
-    """
-    Depth map contains lots of nan area. This function complete the depth map by bilinear interpolation.
-    """
 
 def Cam2World(K,P):
     """
