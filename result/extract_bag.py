@@ -34,15 +34,12 @@ for topic,msg,t in radar_data:
     #print(msg)
     # is_moving = False
     pct_np=np.array(list(pct))
-    for i in pct_np:
-        if abs(i[4])==0:
-            is_moving = True
-            n = n + 1
     # np.save("calibration.npy",k)
     #break
     #cv2.imwrite("depth/"+str(msg.header.stamp.secs)+"_"+str(msg.header.stamp.nsecs).zfill(9)+'.png',d_image)
     #np.save("depth/"+str(msg.header.stamp.secs)+"_"+str(msg.header.stamp.nsecs).zfill(9)+'.npy',d_image)
-    #np.save("radar/"+str(msg.header.stamp.secs)+"_"+str(msg.header.stamp.nsecs).zfill(9)+'.npy',pct_np)
+    np.save("radar/"+str(msg.header.stamp.secs)+"_"+str(msg.header.stamp.nsecs).zfill(9)+'.npy',pct_np)
+    break
     # print(is_moving)
     #is_moving = False
     

@@ -52,9 +52,9 @@ def load_points(ptfile):
             phi = -pt[0]
             theta = math.pi/2-pt[1]
             r = pt[2]
-            x = r*math.sin(theta)*math.cos(phi)
-            y = r*math.sin(phi)*math.sin(theta)
-            z = r*math.cos(theta)
+            x = r*math.sin(theta)*math.cos(phi)+np.random.normal(loc=0,scale=0.1,size=None)
+            y = r*math.sin(phi)*math.sin(theta)+np.random.normal(loc=0,scale=0.1,size=None)
+            z = r*math.cos(theta)+np.random.normal(loc=0,scale=0.1,size=None)
             c = [np.array([x]),np.array([y]),np.array([z])]
             c.append(np.array([1]))
             c=np.array(c)
@@ -149,8 +149,8 @@ def batch_opt(image_path, point_path,depth_path,opt_path, camera_calib_file, seg
         T_Y=[]
         T_Z=[]
         gx = [0]*40
-        gy = [0]*40
-        gz = [-5]*40
+        gy = [-5]*40
+        gz = [-10]*40
         gtx = [0.1]*40
         gty = [0.1]*40
         gtz = [-0.1]*40
@@ -174,16 +174,34 @@ def batch_opt(image_path, point_path,depth_path,opt_path, camera_calib_file, seg
             T_X.append(t_x)
             T_Y.append(t_y)
             T_Z.append(t_z)
-        np.sqrt(mean_squared_error(X,gx))
-        print("rmse: X = {}, Y = {}, Z={}, t_x = {}, t_y = {}, t_z = {}".format(
-        np.sqrt(mean_squared_error(X,gx)),
-        np.sqrt(mean_squared_error(Y,gy)),
-        np.sqrt(mean_squared_error(Z,gz)),
-        np.sqrt(mean_squared_error(T_X,gtx)),
-        np.sqrt(mean_squared_error(T_Y,gty)),
-        np.sqrt(mean_squared_error(T_Z,gtz))
-        ))
-
+        
+        # print("rmse: X = {}, Y = {}, Z={}, t_x = {}, t_y = {}, t_z = {}".format(
+        # np.sqrt(mean_squared_error(X,gx)),
+        # np.sqrt(mean_squared_error(Y,gy)),
+        # np.sqrt(mean_squared_error(Z,gz)),
+        # np.sqrt(mean_squared_error(T_X,gtx)),
+        # np.sqrt(mean_squared_error(T_Y,gty)),
+        # np.sqrt(mean_squared_error(T_Z,gtz))
+        # ))
+        print('begin plotting')
+        X = np.abs(np.array(X)-np.array(gx))
+        Y = np.abs(np.array(Y)-np.array(gy))
+        Z = np.abs(np.array(Z)-np.array(gz))
+        T_X = np.abs(np.array(T_X)-np.array(gtx))
+        T_Y = np.abs(np.array(T_Y)-np.array(gty))
+        T_Z = np.abs(np.array(T_Z)-np.array(gtz))
+        theta = (X+Y+Z)/3
+        plt.hist(theta,bins=5,histtype='stepfilled')
+        plt.xlabel('Absolute Rotation Error [deg]')
+        plt.ylabel('count')
+        plt.savefig('rotate.png')
+        plt.clf()
+        trans = (T_X+T_Y+T_Z)/3
+        plt.hist(trans,bins=5,histtype='stepfilled')
+        plt.xlabel('Absolute Translation Error [m]')
+        plt.ylabel('count')
+        plt.savefig('translation.png')
+        plt.clf()
         #print('Euler angles are phi = {}, theta = {}, psi = {}'.format(X,Y,Z))
 
 
