@@ -68,3 +68,69 @@ if __name__=="__main__":
         d_image = BFS_nan(d_image)
         np.save("result/complete_depth/"+img.split('/')[-1],d_image)
 
+
+
+class Masking_problem():
+    """
+    Problem defined for masking
+    """
+    def __init__(self, mask, constraint):
+        self.mask = mask
+        self.height, self.width = self.mask.shape
+        self.constraint = constraint
+    def get_surroundings(self, p):
+        u,v = p
+        p_set = []
+        if v + 1 < self.height:
+            if self.mask[v+1][u]==1:
+                p_set.append((u,v+1))
+        if v - 1 > 0:
+            if self.mask[v-1][u]==1:
+                p_set.append((u,v-1))
+        if u + 1 < self.width:
+            if self.mask[v][u+1]==1:
+                p_set.append((u+1,v))
+        if u - 1 > 0:
+            if self.mask[v][u-1]==1:
+                p_set.append((u-1,v))
+        return p_set
+
+def BFS(mask, constraint, problem, need_contour = False):
+    """
+    This function will search in the mask to find the largest area with mask == 1
+    return: new_mask in the same shape of mask    
+    """
+    v_idx, u_idx = np.where(constraint(mask))
+    #print(x_idx)
+    mask_set = set([])
+    for i in range(len(v_idx)):
+        mask_set.add((u_idx[i],v_idx[i]))
+    groups = []
+
+    while(len(mask_set) > 0):
+        state_stack = Queue()
+        StartState = mask_set.pop()
+        state_stack.push(StartState)
+        Visit = set([])
+        contour = set([])
+        while True:
+            if state_stack.isEmpty():
+                break
+            state = state_stack.pop()
+            if state not in Visit:
+                Visit.add(state)
+                successors = problem.get_surroundings(state)
+                if successors is not None:
+                    for successor in successors:
+                        state_stack.push(successor)
+                        mask_set.discard(successor)
+        groups.append(Visit)
+
+    if not need_contour:
+        return groups
+    else:
+        return groups
+
+
+
+

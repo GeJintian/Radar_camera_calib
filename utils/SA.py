@@ -50,8 +50,8 @@ class SimulatedAnnealingBase():
     def get_new_x(self, x):
         u = np.random.uniform(-1, 1, size=self.n_dim)
         x_new = np.zeros(x.shape)
-        x_new[:4] = x[:4] + 0.1 * np.sign(u[:4]) * self.T * ((1 + 1.0 / self.T) ** np.abs(u[:4]) - 1.0)
-        x_new[4:] = x[4:] + 0.05 * np.sign(u[4:]) * self.T * ((1 + 1.0 / self.T) ** np.abs(u[4:]) - 1.0)
+        x_new[:3] = x[:3] + 0.01 * np.sign(u[:3]) * self.T * ((1 + 1.0 / self.T) ** np.abs(u[:3]) - 1.0)
+        x_new[3:] = x[3:] + 0.05 * np.sign(u[3:]) * self.T * ((1 + 1.0 / self.T) ** np.abs(u[3:]) - 1.0)
         return x_new
 
     def cool_down(self):
