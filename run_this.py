@@ -16,6 +16,7 @@ from utils.visualize import seg_mask, viz_optical, viz_mask, print_minmax, viz_p
 from coarse_opt import coarse_optimize, single_projection_problem, batch_projection_problem
 from fine_opt import optical_field, fine_optimize,fine_sa
 from matplotlib import pyplot as plt
+from sklearn.metrics import mean_squared_error
 
 
 DEVICE = 'cuda'
@@ -136,71 +137,104 @@ def batch_opt(image_path, point_path,depth_path,opt_path, camera_calib_file, seg
             seg_result = load_seg(os.path.join(seg_path,imfile.split('/')[-1].split('.')[0]+'.png'))
             remasking = remask(seg_result,12) # 12 is the idx of person
             new_mask = BFS_mask(remasking)
-            viz_pts(new_mask,imfile,P_r,M_t_init,K)
+            #viz_pts(new_mask,imfile,P_r,M_t_init,K)
             problem = single_projection_problem(K, new_mask, depth_map, P_r, V_r, imfile.split('/')[-1])
             problem_sets.append(problem)
         
         problems = batch_projection_problem(problem_sets)
-        print("In the beginning, the score is", problems.objective_function(M_t_init))
-        M_t = coarse_optimize(M_t_init, problems)
-        M_t_init = M_t
-        x,y,z,w = M_t_init[:4]
-        mag = np.sqrt(x*x+y*y+z*z+w*w)
-        M_t_init[:4] = [x,y,z,w]/mag
-        print("Finish coarse optimize")
-        print('Coarse opt result is',M_t_init)
-        qx,qy,qz,qw = M_t_init[:4]
-        phi, theta, psi = quaternion_to_euler_angle(qw,qx,qy,qz)
-        print('Euler angles are phi = {}, theta = {}, psi = {}'.format(phi,theta,psi))
+        X=[]
+        Y=[]
+        Z=[]
+        T_X=[]
+        T_Y=[]
+        T_Z=[]
+        gx = [0]*40
+        gy = [0]*40
+        gz = [-5]*40
+        gtx = [0.1]*40
+        gty = [0.1]*40
+        gtz = [-0.1]*40
+        for i in range(40):
+            M_t_init = [0,0,0.00001,0.99999,8/100,8/100,-8/100]
 
-        # fine optimize
-        idx = problems.update(M_t_init)
-        model = torch.nn.DataParallel(RAFT(args))
-        model.load_state_dict(torch.load(raft_ckpts))
+            #print("In the beginning, the score is", problems.objective_function(M_t_init))
+            M_t = coarse_optimize(M_t_init, problems)
+            M_t_init = M_t
+            x,y,z,w = M_t_init[:4]
+            mag = np.sqrt(x*x+y*y+z*z+w*w)
+            M_t_init[:4] = [x,y,z,w]/mag
+            #print("Finish coarse optimize")
+            #print('Coarse opt result is',M_t_init)
+            qx,qy,qz,qw = M_t_init[:4]
+            x,y,z = quaternion_to_euler_angle(qw,qx,qy,qz)
+            t_x,t_y,t_z = M_t_init[4:]
+            X.append(x)
+            Y.append(y)
+            Z.append(z)
+            T_X.append(t_x)
+            T_Y.append(t_y)
+            T_Z.append(t_z)
+        np.sqrt(mean_squared_error(X,gx))
+        print("rmse: X = {}, Y = {}, Z={}, t_x = {}, t_y = {}, t_z = {}".format(
+        np.sqrt(mean_squared_error(X,gx)),
+        np.sqrt(mean_squared_error(Y,gy)),
+        np.sqrt(mean_squared_error(Z,gz)),
+        np.sqrt(mean_squared_error(T_X,gtx)),
+        np.sqrt(mean_squared_error(T_Y,gty)),
+        np.sqrt(mean_squared_error(T_Z,gtz))
+        ))
 
-        model = model.module
-        model.to(DEVICE)
-        model.eval()
-        for id in idx:
-            img_names[id] = None
+        #print('Euler angles are phi = {}, theta = {}, psi = {}'.format(X,Y,Z))
 
-        fields = []
-        P_rs = []
-        V_rs = []
-        print("Prepare for fine opt")
-        for idx in range(len(img_names)-1):
-            imgs = img_names[idx]
-            if imgs is not None:
-                im1 = os.path.join(image_path,imgs[0].split('/')[-1])
-                im2 = os.path.join(image_path,imgs[1].split('/')[-1])
-                image1 = load_RGB(im1)
-                image2 = load_RGB(im2)
-                # padder = InputPadder(image1.shape)
-                # image1, image2 = padder.pad(image1, image2)
-                # _, flow_up = model(image1, image2, iters=20, test_mode=True)
-                # flow_up = flow_up[0].cpu()
-                flow_up = load_opt(os.path.join(opt_path,imgs[1].split('/')[-1].split('.')[0]+'.npy'))
-                image1 = load_depth(os.path.join(depth_path,imgs[0].split('/')[-1].split('.')[0]+'.png'))
-                image2 = load_depth(os.path.join(depth_path,imgs[1].split('/')[-1].split('.')[0]+'.png'))
-                field = optical_field(flow_up,image1, image2, problem_sets[idx+1].mask, problem_sets[idx+1].centroid, K, 0.05, 0.01, 0.01, 0.01)
-                P_r = problem_sets[idx].P_r
-                V_r = problem_sets[idx].V_r
-                for p in range(len(P_r)):
-                    pr = P_r[p]
-                    P_rs.append(pr)
-                    V_rs.append(V_r[p]*pr/np.linalg.norm(pr))
-                    fields.append(field)
-        print("Begin fine optimization")
-        M_t_init = fine_optimize(M_t_init, P_rs, V_rs, fields)
-        print(M_t_init)
-        rot = M_t_init[:3][:3]
-        qw = np.sqrt(1+rot[0][0]+rot[1][1]+rot[2][2])/2
-        qx = (rot[2][1]-rot[1][2])/(4*qw)
-        qy = (rot[0][2]-rot[2][0])/(4*qw)
-        qz = (rot[1][0]-rot[0][1])/(4*qw)
-        print('quaternions are', [qx,qy,qz,qw])
-        phi, theta, psi = quaternion_to_euler_angle(qw,qx,qy,qz)
-        print('Euler angles are phi = {}, theta = {}, psi = {}'.format(phi,theta,psi))
+
+        # # fine optimize
+        # idx = problems.update(M_t_init)
+        # model = torch.nn.DataParallel(RAFT(args))
+        # model.load_state_dict(torch.load(raft_ckpts))
+
+        # model = model.module
+        # model.to(DEVICE)
+        # model.eval()
+        # for id in idx:
+        #     img_names[id] = None
+
+        # fields = []
+        # P_rs = []
+        # V_rs = []
+        # print("Prepare for fine opt")
+        # for idx in range(len(img_names)-1):
+        #     imgs = img_names[idx]
+        #     if imgs is not None:
+        #         im1 = os.path.join(image_path,imgs[0].split('/')[-1])
+        #         im2 = os.path.join(image_path,imgs[1].split('/')[-1])
+        #         image1 = load_RGB(im1)
+        #         image2 = load_RGB(im2)
+        #         # padder = InputPadder(image1.shape)
+        #         # image1, image2 = padder.pad(image1, image2)
+        #         # _, flow_up = model(image1, image2, iters=20, test_mode=True)
+        #         # flow_up = flow_up[0].cpu()
+        #         flow_up = load_opt(os.path.join(opt_path,imgs[1].split('/')[-1].split('.')[0]+'.npy'))
+        #         image1 = load_depth(os.path.join(depth_path,imgs[0].split('/')[-1].split('.')[0]+'.png'))
+        #         image2 = load_depth(os.path.join(depth_path,imgs[1].split('/')[-1].split('.')[0]+'.png'))
+        #         field = optical_field(flow_up,image1, image2, problem_sets[idx+1].mask, problem_sets[idx+1].centroid, K, 0.05, 0.01, 0.01, 0.01)
+        #         P_r = problem_sets[idx].P_r
+        #         V_r = problem_sets[idx].V_r
+        #         for p in range(len(P_r)):
+        #             pr = P_r[p]
+        #             P_rs.append(pr)
+        #             V_rs.append(-V_r[p]*pr/np.linalg.norm(pr))
+        #             fields.append(field)
+        # print("Begin fine optimization")
+        # M_t_init = fine_optimize(M_t_init, P_rs, V_rs, fields)
+        # print(M_t_init)
+        # rot = M_t_init[:3][:3]
+        # qw = np.sqrt(1+rot[0][0]+rot[1][1]+rot[2][2])/2
+        # qx = (rot[2][1]-rot[1][2])/(4*qw)
+        # qy = (rot[0][2]-rot[2][0])/(4*qw)
+        # qz = (rot[1][0]-rot[0][1])/(4*qw)
+        # print('quaternions are', [qx,qy,qz,qw])
+        # X,Y,Z = quaternion_to_euler_angle(qw,qx,qy,qz)
+        # print('Euler angles are phi = {}, theta = {}, psi = {}'.format(X,Y,Z))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -222,4 +256,5 @@ if __name__ == '__main__':
     M_t_init = [0,0,0.00001,0.99999,10/100,10/100,-10/100]
 
     #single_opt(image_path, point_path,depth_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, alignment)
+
     batch_opt(image_path, point_path,depth_path,opt_path, camera_calib_file, segment_cfg, segment_ckpts, M_t_init, seg_path, raft_ckpts,args)

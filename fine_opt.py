@@ -56,10 +56,16 @@ class optical_field():
     
     def get_velocity(self, P):
         u,v = World2Cam(self.k, P)
-        vel = -self.get_velocity_uv(u[0],v[0])
+        vel = self.get_velocity_uv(u[0],v[0])
         if np.sqrt(abs(vel.T@vel)) > 5:
             self.count = self.count + 1
         #     #print('counting')
+        vel = np.array([
+            [0],
+            [3],
+            [0],
+            [0]
+        ])
         return vel
 
     #We might need bilinear interpolation and central difference for optical field
@@ -71,7 +77,7 @@ class optical_field():
         for j in range(3):
             for i in range(3):
                 fdm = self.fdm(P,self.dp[j],j)
-                result[i][j] = fdm[i][0]
+                result[i][j] = 0
         return np.array(result)
     
     def fdm(self, p, dp, axis):
@@ -292,20 +298,19 @@ def fine_optimize(M_init, Prs, Vrs, fields):
     M_init = build_matrix(M_init)
     print(M_init)
     x0 = Group2Alg(M_init)
-
+    j = objective_func(x0.transpose()[0],Prs,fields,Vrs)
+    print('befor fine opt, j is ',j@j.T)
     res_log = least_squares(objective_func, derivative, x0, fields, Vrs, Prs, method = 'lm')
     x=res_log.x
-    count = 0
-    for f in fields:
-        count += f.count
-    print(count)
+    j=objective_func(x,Prs,fields,Vrs)
+    print('after fine opt, j is ',j@j.T)
     disturbance_trans(x, objective_func, Prs, Vrs, fields,0)
     disturbance_trans(x, objective_func, Prs, Vrs, fields,1)
     disturbance_trans(x, objective_func, Prs, Vrs, fields,2)
     disturbance_trans(x, objective_func, Prs, Vrs, fields,3)
     disturbance_trans(x, objective_func, Prs, Vrs, fields,4)
     disturbance_trans(x, objective_func, Prs, Vrs, fields,5)
-    print(res_log)
+    #print(res_log)
     np.save('opt_LieAlg.npy',x)
     x = np.array([x]).transpose()
     return Alg2Group(x)
